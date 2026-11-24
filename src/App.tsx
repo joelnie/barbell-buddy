@@ -19,7 +19,7 @@ function AppShell() {
   if (!isReady) {
     return (
       <div className="flex min-h-dvh items-center justify-center p-6 text-sm font-semibold">
-        Loading Barbell Buddy…
+        Ladataan Barbell Buddya…
       </div>
     );
   }

@@ -27,7 +27,7 @@ export const STARTER_LIFTERS: Lifter[] = [
 export const STARTER_EXERCISES: Exercise[] = [
   {
     id: 'ex-pullups',
-    name: 'Pull-ups',
+    name: 'Leuanveto',
     category: 'pullup',
     isBuiltin: true,
     sortOrder: 1,
@@ -35,7 +35,7 @@ export const STARTER_EXERCISES: Exercise[] = [
   },
   {
     id: 'ex-bench-press',
-    name: 'Bench Press',
+    name: 'Penkkipunnerrus',
     category: 'barbell',
     isBuiltin: true,
     sortOrder: 2,
@@ -43,7 +43,7 @@ export const STARTER_EXERCISES: Exercise[] = [
   },
   {
     id: 'ex-incline-db-bench',
-    name: 'Incline Dumbbell Bench Press',
+    name: 'Vinopenkki käsipainoilla',
     category: 'dumbbell',
     isBuiltin: true,
     sortOrder: 3,
@@ -51,7 +51,7 @@ export const STARTER_EXERCISES: Exercise[] = [
   },
   {
     id: 'ex-deadlift',
-    name: 'Deadlift',
+    name: 'Maastaveto',
     category: 'barbell',
     isBuiltin: true,
     sortOrder: 4,
@@ -59,7 +59,7 @@ export const STARTER_EXERCISES: Exercise[] = [
   },
   {
     id: 'ex-squat',
-    name: 'Squat',
+    name: 'Kyykky',
     category: 'barbell',
     isBuiltin: true,
     sortOrder: 5,

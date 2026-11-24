@@ -17,7 +17,7 @@ export default defineConfig(({ mode }) => {
         manifest: {
           name: 'Barbell Buddy',
           short_name: 'Barbell Buddy',
-          description: 'Real-time collaborative gym progress tracker for your crew.',
+          description: 'Reaaliaikainen salitreenien ja kehityksen seuranta treeniporukalle.',
           theme_color: '#090d16',
           background_color: '#090d16',
           display: 'standalone',

@@ -9,9 +9,12 @@
 ## Features
 
 - **Starter Crew & Open Progress**: Comes ready with **Julie**, **Joel** (Admin), and **Leevi**, plus support for adding new lifters anytime. Everyone can view historical sessions and strength curves, and partners in the same workout can log sets for one another.
-- **Starter & Custom Exercises**:
-  - **Pull-ups** with three dedicated modes: **`Assisted`** (reps only — never negative weight), **`Bodyweight`** (reps only), and **`+ Kilograms`** (added weight + reps).
-  - **Bench Press**, **Incline Dumbbell Bench Press** (`kg / DB`), **Deadlift**, and **Squat**, plus custom exercises added in-app.
+- **100 % suomenkielinen käyttöliittymä & vaihtuvat treenilauseet**:
+  - Koko sovellus on suomeksi (`Treeni`, `Historia`, `Kehitys`, `Asetukset`) ja tukee myös aiemmin luotuja englanninkielisiä Supabase-liikerivejä automaattisesti.
+  - Aloitusnäkymässä vaihtuu 22 motivoivaa suomenkielistä treenilausetta (mukaan lukien käyttäjän nimellä personoidut tervehdykset).
+- **Starter & Custom Exercises with Dual Vertical Sliders**:
+  - **Left Vertical Slider**: **Toistot** (`1`–`30`) with smooth touch scrubbing and `+` / `−` precision steppers.
+  - **Right Vertical Slider**: Exercise-tailored discrete weight stops — **Leuanveto** (`Kuminauha`, `Kehonpaino`, `+2.5` to `+30 kg`, never negative weight), **Penkkipunnerrus** (`20`–`120 kg` by `2.5`), **Kyykky** (`20`–`150 kg` by `2.5`), **Maastaveto** (`25`–`180 kg` by `2.5`), **Vinopenkki käsipainoilla** (`8, 9, 10, 12, …, 40 kg / kp`), plus custom exercises added in-app.
 - **Participant-Scoped Live Sessions & Parallel Workouts**:
   - Sessions are named by date (`YYYY-MM-DD`).
   - Tap **New Session** and select who is lifting together. Only selected participants see and log into that live session on Tab 1—allowing other lifters to run separate sessions on the very same day.

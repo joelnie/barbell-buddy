@@ -14,6 +14,7 @@ import type {
 } from '../types/models';
 import { verifyAdminPinHash } from './adminAuth';
 import { computeSessionExpiryIso, formatLocalDate, isSessionActiveAt } from './dates';
+import { localizeExerciseName } from './finnish';
 import { normalizeAndValidateSet } from './metrics';
 
 interface LifterRow {
@@ -125,7 +126,7 @@ export class SupabaseRealtimeStore implements DataStore {
       password,
     });
     if (error) {
-      throw new Error(error.message || 'Invalid crew passcode.');
+      throw new Error(error.message || 'Virheellinen porukan salasana.');
     }
     this.updateSnapshot({ authRequired: false, syncStatus: 'syncing', crewEmail: email });
     await this.refresh();
@@ -229,7 +230,7 @@ export class SupabaseRealtimeStore implements DataStore {
 
     const exercises: Exercise[] = ((exercisesRes.data ?? []) as ExerciseRow[]).map((r) => ({
       id: r.id,
-      name: r.name,
+      name: localizeExerciseName(r.name),
       category: r.category,
       isBuiltin: r.is_builtin,
       sortOrder: r.sort_order,
@@ -304,7 +305,7 @@ export class SupabaseRealtimeStore implements DataStore {
 
     const uniqueParticipants = Array.from(new Set(input.participantIds.filter(Boolean)));
     if (uniqueParticipants.length === 0) {
-      throw new Error('Select at least one lifter for the session.');
+      throw new Error('Valitse vähintään yksi treenaaja treeniin.');
     }
 
     for (const pid of uniqueParticipants) {
@@ -312,8 +313,8 @@ export class SupabaseRealtimeStore implements DataStore {
         (s) => isSessionActiveAt(s, now) && s.participantIds.includes(pid),
       );
       if (conflict) {
-        const lifterName = this.snapshot.lifters.find((l) => l.id === pid)?.name ?? 'Lifter';
-        throw new Error(`${lifterName} is already in an active session.`);
+        const lifterName = this.snapshot.lifters.find((l) => l.id === pid)?.name ?? 'Treenaaja';
+        throw new Error(`${lifterName} on jo käynnissä olevassa treenissä.`);
       }
     }
 
@@ -333,7 +334,7 @@ export class SupabaseRealtimeStore implements DataStore {
       .single();
 
     if (error || !data) {
-      throw new Error(error?.message ?? 'Could not create session.');
+      throw new Error(error?.message ?? 'Treenin luonti epäonnistui.');
     }
 
     const row = data as SessionRow;
@@ -373,8 +374,8 @@ export class SupabaseRealtimeStore implements DataStore {
       (s) => s.id !== sessionId && isSessionActiveAt(s, now) && s.participantIds.includes(lifterId),
     );
     if (conflict) {
-      const lifterName = this.snapshot.lifters.find((l) => l.id === lifterId)?.name ?? 'Lifter';
-      throw new Error(`${lifterName} is already in another active session.`);
+      const lifterName = this.snapshot.lifters.find((l) => l.id === lifterId)?.name ?? 'Treenaaja';
+      throw new Error(`${lifterName} on jo toisessa käynnissä olevassa treenissä.`);
     }
 
     const { error } = await this.client.from('session_participants').insert({
@@ -396,7 +397,7 @@ export class SupabaseRealtimeStore implements DataStore {
 
   async addSet(input: AddSetInput): Promise<WorkoutSet> {
     const exercise = this.snapshot.exercises.find((e) => e.id === input.exerciseId);
-    if (!exercise) throw new Error('Exercise not found.');
+    if (!exercise) throw new Error('Liikettä ei löytynyt.');
 
     const normalized = normalizeAndValidateSet(exercise, {
       pullupMode: input.pullupMode,
@@ -418,7 +419,7 @@ export class SupabaseRealtimeStore implements DataStore {
       .select('*')
       .single();
 
-    if (error || !data) throw new Error(error?.message ?? 'Failed to add set.');
+    if (error || !data) throw new Error(error?.message ?? 'Sarjan tallennus epäonnistui.');
     const r = data as SetRow;
     await this.refresh();
     return {
@@ -436,9 +437,9 @@ export class SupabaseRealtimeStore implements DataStore {
 
   async updateSet(setId: string, patch: UpdateSetPatch): Promise<WorkoutSet> {
     const existing = this.snapshot.sets.find((s) => s.id === setId);
-    if (!existing) throw new Error('Set not found.');
+    if (!existing) throw new Error('Sarjaa ei löytynyt.');
     const exercise = this.snapshot.exercises.find((e) => e.id === existing.exerciseId);
-    if (!exercise) throw new Error('Exercise not found.');
+    if (!exercise) throw new Error('Liikettä ei löytynyt.');
 
     const normalized = normalizeAndValidateSet(exercise, {
       pullupMode: patch.pullupMode !== undefined ? patch.pullupMode : existing.pullupMode,
@@ -457,7 +458,7 @@ export class SupabaseRealtimeStore implements DataStore {
       .select('*')
       .single();
 
-    if (error || !data) throw new Error(error?.message ?? 'Failed to update set.');
+    if (error || !data) throw new Error(error?.message ?? 'Sarjan päivitys epäonnistui.');
     const r = data as SetRow;
     await this.refresh();
     return {
@@ -481,7 +482,7 @@ export class SupabaseRealtimeStore implements DataStore {
 
   async addLifter(input: { name: string; avatarColor: string }): Promise<Lifter> {
     const trimmed = input.name.trim();
-    if (!trimmed) throw new Error('Enter a name for the new user.');
+    if (!trimmed) throw new Error('Anna uuden käyttäjän nimi.');
 
     const { data, error } = await this.client
       .from('lifters')
@@ -493,7 +494,7 @@ export class SupabaseRealtimeStore implements DataStore {
       .select('*')
       .single();
 
-    if (error || !data) throw new Error(error?.message ?? 'Failed to add user.');
+    if (error || !data) throw new Error(error?.message ?? 'Käyttäjän lisääminen epäonnistui.');
     const r = data as LifterRow;
     await this.refresh();
     return {
@@ -516,13 +517,13 @@ export class SupabaseRealtimeStore implements DataStore {
 
   async addExercise(input: { name: string; category: ExerciseCategory }): Promise<Exercise> {
     const trimmed = input.name.trim();
-    if (!trimmed) throw new Error('Enter an exercise name.');
+    if (!trimmed) throw new Error('Anna liikkeen nimi.');
     const maxSort = this.snapshot.exercises.reduce((m, e) => Math.max(m, e.sortOrder), 0);
 
     const { data, error } = await this.client
       .from('exercises')
       .insert({
-        name: trimmed,
+        name: localizeExerciseName(trimmed),
         category: input.category,
         is_builtin: false,
         sort_order: maxSort + 1,
@@ -530,12 +531,12 @@ export class SupabaseRealtimeStore implements DataStore {
       .select('*')
       .single();
 
-    if (error || !data) throw new Error(error?.message ?? 'Failed to add exercise.');
+    if (error || !data) throw new Error(error?.message ?? 'Liikkeen lisääminen epäonnistui.');
     const r = data as ExerciseRow;
     await this.refresh();
     return {
       id: r.id,
-      name: r.name,
+      name: localizeExerciseName(r.name),
       category: r.category,
       isBuiltin: r.is_builtin,
       sortOrder: r.sort_order,

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Award, TrendingUp } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { isBenchPressExercise } from '../lib/finnish';
 import {
   computeProgressionByLifter,
   formatWeightNumber,
@@ -19,7 +20,7 @@ export function ProgressTab() {
   useEffect(() => {
     if (snapshot.exercises.length === 0) return;
     if (!selectedExerciseId || !snapshot.exercises.some((e) => e.id === selectedExerciseId)) {
-      const bench = snapshot.exercises.find((e) => e.name === 'Bench Press');
+      const bench = snapshot.exercises.find((e) => isBenchPressExercise(e));
       setSelectedExerciseId((bench ?? snapshot.exercises[0]).id);
     }
   }, [snapshot.exercises, selectedExerciseId]);
@@ -116,11 +117,11 @@ export function ProgressTab() {
             className="mb-1.5 block text-xs font-bold uppercase tracking-wider"
             style={{ color: 'var(--text-muted)' }}
           >
-            Track Exercise Progress
+            Seuraa liikkeen kehitystä
           </label>
           <select
             id="progress-exercise-select"
-            aria-label="Progress exercise"
+            aria-label="Kehityksen liike"
             value={selectedExercise.id}
             onChange={(e) => setSelectedExerciseId(e.target.value)}
             className="bb-input w-full px-3.5 py-2.5 text-sm font-bold"
@@ -134,12 +135,12 @@ export function ProgressTab() {
         </div>
 
         {selectedExercise.category === 'pullup' && (
-          <div className="grid grid-cols-3 gap-2" role="group" aria-label="Pull-up progress mode">
+          <div className="grid grid-cols-3 gap-2" role="group" aria-label="Leuanvedon seurantatapa">
             {(
               [
-                { id: 'assisted', label: 'Assisted' },
-                { id: 'bodyweight', label: 'Bodyweight' },
-                { id: 'weighted', label: '+ Kilograms' },
+                { id: 'assisted', label: 'Kuminauha' },
+                { id: 'bodyweight', label: 'Kehonpaino' },
+                { id: 'weighted', label: '+ Kilot' },
               ] as const
             ).map((opt) => (
               <button
@@ -158,7 +159,7 @@ export function ProgressTab() {
         )}
 
         {showWeightedMetricToggle && (
-          <div className="grid grid-cols-2 gap-2" role="group" aria-label="Progress metric">
+          <div className="grid grid-cols-2 gap-2" role="group" aria-label="Kehitysmittari">
             <button
               type="button"
               aria-pressed={weightedMetric === 'topWeight'}
@@ -167,7 +168,7 @@ export function ProgressTab() {
                 weightedMetric === 'topWeight' ? 'bb-pill-active' : 'bb-pill-idle'
               }`}
             >
-              Top Weight ({progression.yAxisUnit})
+              Maksimipaino ({progression.yAxisUnit})
             </button>
             <button
               type="button"
@@ -177,13 +178,13 @@ export function ProgressTab() {
                 weightedMetric === 'e1rm' ? 'bb-pill-active' : 'bb-pill-idle'
               }`}
             >
-              Est. 1RM ({progression.yAxisUnit})
+              Arvioitu 1RM ({progression.yAxisUnit})
             </button>
           </div>
         )}
 
         {/* Lifter Toggles */}
-        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Compare lifters">
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Vertaile treenaajia">
           {snapshot.lifters.map((lifter) => {
             const active = visibleLifterIds.includes(lifter.id);
             return (
@@ -212,7 +213,7 @@ export function ProgressTab() {
         <div className="mb-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <TrendingUp className="h-4 w-4" style={{ color: 'var(--accent-text)' }} />
-            <h3 className="text-sm font-extrabold">Progression Over Sessions</h3>
+            <h3 className="text-sm font-extrabold">Kehitys treeneittäin</h3>
           </div>
           <span className="text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>
             {progression.yAxisUnit}
@@ -222,9 +223,9 @@ export function ProgressTab() {
         {!hasChartData ? (
           <div className="bb-subcard flex flex-col items-center py-9 text-center">
             <TrendingUp className="mb-2 h-6 w-6" style={{ color: 'var(--text-muted)' }} />
-            <p className="text-sm font-semibold">No sets recorded yet for {selectedExercise.name}</p>
+            <p className="text-sm font-semibold">Ei vielä sarjoja liikkeelle {selectedExercise.name}</p>
             <p className="mt-0.5 text-xs" style={{ color: 'var(--text-muted)' }}>
-              Log sets in the Session tab to plot progression curves across dates.
+              Kirjaa sarjoja Treeni-välilehdellä nähdäksesi kehityskäyrät.
             </p>
           </div>
         ) : (
@@ -233,7 +234,7 @@ export function ProgressTab() {
               viewBox={`0 0 ${chartWidth} ${chartHeight}`}
               className="w-full overflow-visible"
               role="img"
-              aria-label={`${selectedExercise.name} progression chart`}
+              aria-label={`Liikkeen ${selectedExercise.name} kehityskaavio`}
             >
               {[0, 0.5, 1].map((t) => {
                 const val = Math.round((yMin + (yMax - yMin) * t) * 10) / 10;
@@ -337,7 +338,7 @@ export function ProgressTab() {
       <section className="bb-widget p-4">
         <div className="mb-3 flex items-center gap-2">
           <Award className="h-4 w-4" style={{ color: 'var(--accent-text)' }} />
-          <h3 className="text-sm font-extrabold">Crew Personal Records</h3>
+          <h3 className="text-sm font-extrabold">Porukan omat ennätykset</h3>
         </div>
 
         <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
@@ -361,15 +362,15 @@ export function ProgressTab() {
                       {formatWeightNumber(pr.bestValue)} {pr.unit}
                     </div>
                     <div className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>
-                      Best set: {pr.bestSetLabel}
+                      Paras sarja: {pr.bestSetLabel}
                     </div>
                     <div className="mt-0.5 text-[10px]" style={{ color: 'var(--text-muted)' }}>
-                      {pr.sessionDate} · {pr.totalSets} total sets
+                      {pr.sessionDate} · {pr.totalSets} {pr.totalSets === 1 ? 'sarja yhteensä' : 'sarjaa yhteensä'}
                     </div>
                   </div>
                 ) : (
                   <p className="mt-2 text-xs" style={{ color: 'var(--text-muted)' }}>
-                    No sets logged yet
+                    Ei vielä kirjattuja sarjoja
                   </p>
                 )}
               </div>

@@ -92,11 +92,11 @@ on conflict (id) do nothing;
 
 insert into public.exercises (name, category, is_builtin, sort_order)
 values
-  ('Pull-ups', 'pullup', true, 1),
-  ('Bench Press', 'barbell', true, 2),
-  ('Incline Dumbbell Bench Press', 'dumbbell', true, 3),
-  ('Deadlift', 'barbell', true, 4),
-  ('Squat', 'barbell', true, 5)
+  ('Leuanveto', 'pullup', true, 1),
+  ('Penkkipunnerrus', 'barbell', true, 2),
+  ('Vinopenkki käsipainoilla', 'dumbbell', true, 3),
+  ('Maastaveto', 'barbell', true, 4),
+  ('Kyykky', 'barbell', true, 5)
 on conflict (name) do nothing;
 
 -- =============================================================================
@@ -203,16 +203,16 @@ declare
 begin
   select is_admin into actor_is_admin from public.lifters where id = acting_lifter_id;
   if coalesce(actor_is_admin, false) is not true then
-    raise exception 'Only Joel (admin) can delete users.';
+    raise exception 'Vain Joel (ylläpitäjä) voi poistaa käyttäjiä.';
   end if;
 
   if target_lifter_id = acting_lifter_id then
-    raise exception 'Admin cannot delete their own user account.';
+    raise exception 'Ylläpitäjä ei voi poistaa omaa käyttäjätiliään.';
   end if;
 
   select is_admin into target_is_admin from public.lifters where id = target_lifter_id;
   if coalesce(target_is_admin, false) is true then
-    raise exception 'Cannot delete an admin user.';
+    raise exception 'Ylläpitäjää ei voi poistaa.';
   end if;
 
   delete from public.lifters where id = target_lifter_id;
@@ -230,7 +230,7 @@ declare
 begin
   select is_admin into actor_is_admin from public.lifters where id = acting_lifter_id;
   if coalesce(actor_is_admin, false) is not true then
-    raise exception 'Only Joel (admin) can remove exercises.';
+    raise exception 'Vain Joel (ylläpitäjä) voi poistaa liikkeitä.';
   end if;
 
   delete from public.exercises where id = target_exercise_id;

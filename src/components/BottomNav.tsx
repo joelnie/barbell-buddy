@@ -8,10 +8,10 @@ interface BottomNavProps {
 }
 
 const NAV_ITEMS: { id: AppTab; label: string; Icon: typeof Dumbbell }[] = [
-  { id: 'session', label: 'Session', Icon: Dumbbell },
-  { id: 'history', label: 'History', Icon: CalendarClock },
-  { id: 'progress', label: 'Progress', Icon: TrendingUp },
-  { id: 'settings', label: 'Settings', Icon: Settings },
+  { id: 'session', label: 'Treeni', Icon: Dumbbell },
+  { id: 'history', label: 'Historia', Icon: CalendarClock },
+  { id: 'progress', label: 'Kehitys', Icon: TrendingUp },
+  { id: 'settings', label: 'Asetukset', Icon: Settings },
 ];
 
 export function BottomNav({ activeTab, onSelectTab }: BottomNavProps) {
@@ -19,7 +19,7 @@ export function BottomNav({ activeTab, onSelectTab }: BottomNavProps) {
 
   return (
     <nav
-      aria-label="Main navigation"
+      aria-label="Päänavigaatio"
       className="bb-safe-bottom fixed right-0 bottom-0 left-0 z-30 border-t px-2 pt-2 backdrop-blur-md"
       style={{
         backgroundColor: 'color-mix(in srgb, var(--bg-surface) 92%, transparent)',
@@ -52,7 +52,7 @@ export function BottomNav({ activeTab, onSelectTab }: BottomNavProps) {
                 <Icon className="h-5 w-5" />
                 {id === 'session' && activeSessionForMainUser && (
                   <span
-                    title="Active workout session"
+                    title="Käynnissä oleva treeni"
                     className="absolute -top-1 -right-1.5 h-2.5 w-2.5 rounded-full"
                     style={{ backgroundColor: 'var(--accent)' }}
                   />

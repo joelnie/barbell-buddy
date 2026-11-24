@@ -12,6 +12,7 @@ import type {
 } from '../types/models';
 import { verifyAdminPinHash } from './adminAuth';
 import { computeSessionExpiryIso, formatLocalDate, isSessionActiveAt } from './dates';
+import { localizeExercise, localizeExerciseName } from './finnish';
 import { normalizeAndValidateSet } from './metrics';
 import { STARTER_EXERCISES, STARTER_LIFTERS } from './seedData';
 
@@ -87,9 +88,9 @@ export class LocalRealtimeStore implements DataStore {
   }
 
   private buildSnapshot(data: PersistedLocalData): StoreSnapshot {
-    const sortedExercises = [...data.exercises].sort(
-      (a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name),
-    );
+    const sortedExercises = data.exercises
+      .map((e) => localizeExercise(e))
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, 'fi'));
     const sortedSessions = [...data.sessions].sort(
       (a, b) => b.sessionDate.localeCompare(a.sessionDate) || b.startedAt.localeCompare(a.startedAt),
     );
@@ -199,19 +200,19 @@ export class LocalRealtimeStore implements DataStore {
 
     const uniqueParticipants = Array.from(new Set(input.participantIds.filter(Boolean)));
     if (uniqueParticipants.length === 0) {
-      throw new Error('Select at least one lifter for the session.');
+      throw new Error('Valitse vähintään yksi treenaaja treeniin.');
     }
 
     for (const pid of uniqueParticipants) {
       if (!data.lifters.some((l) => l.id === pid)) {
-        throw new Error('Unknown lifter selected.');
+        throw new Error('Tuntematon treenaaja valittu.');
       }
       const alreadyActive = data.sessions.find(
         (s) => isSessionActiveAt(s, now) && s.participantIds.includes(pid),
       );
       if (alreadyActive) {
-        const lifterName = data.lifters.find((l) => l.id === pid)?.name ?? 'Lifter';
-        throw new Error(`${lifterName} is already in an active session.`);
+        const lifterName = data.lifters.find((l) => l.id === pid)?.name ?? 'Treenaaja';
+        throw new Error(`${lifterName} on jo käynnissä olevassa treenissä.`);
       }
     }
 
@@ -244,10 +245,10 @@ export class LocalRealtimeStore implements DataStore {
     const data = this.readFromStorage();
     const target = data.sessions.find((s) => s.id === sessionId);
     if (!target || !isSessionActiveAt(target, now)) {
-      throw new Error('This session is no longer active.');
+      throw new Error('Tämä treeni ei ole enää käynnissä.');
     }
     if (!data.lifters.some((l) => l.id === lifterId)) {
-      throw new Error('Lifter not found.');
+      throw new Error('Treenaajaa ei löytynyt.');
     }
     if (target.participantIds.includes(lifterId)) {
       return;
@@ -257,8 +258,8 @@ export class LocalRealtimeStore implements DataStore {
       (s) => s.id !== sessionId && isSessionActiveAt(s, now) && s.participantIds.includes(lifterId),
     );
     if (conflict) {
-      const lifterName = data.lifters.find((l) => l.id === lifterId)?.name ?? 'Lifter';
-      throw new Error(`${lifterName} is already in another active session.`);
+      const lifterName = data.lifters.find((l) => l.id === lifterId)?.name ?? 'Treenaaja';
+      throw new Error(`${lifterName} on jo toisessa käynnissä olevassa treenissä.`);
     }
 
     const updatedSessions = data.sessions.map((s) =>
@@ -275,7 +276,7 @@ export class LocalRealtimeStore implements DataStore {
     const data = this.readFromStorage();
     const target = data.sessions.find((s) => s.id === sessionId);
     if (!target) {
-      throw new Error('Session not found.');
+      throw new Error('Treeniä ei löytynyt.');
     }
     if (target.status === 'completed') return;
 
@@ -299,18 +300,18 @@ export class LocalRealtimeStore implements DataStore {
     const data = this.readFromStorage();
     const session = data.sessions.find((s) => s.id === input.sessionId);
     if (!session) {
-      throw new Error('Session not found.');
+      throw new Error('Treeniä ei löytynyt.');
     }
     if (!session.participantIds.includes(input.lifterId)) {
-      throw new Error('Selected lifter is not a participant in this session.');
+      throw new Error('Valittu treenaaja ei ole mukana tässä treenissä.');
     }
     if (input.loggedBy && !session.participantIds.includes(input.loggedBy)) {
-      throw new Error('Only participants of this session can add sets to it.');
+      throw new Error('Vain treenin osallistujat voivat lisätä siihen sarjoja.');
     }
 
     const exercise = data.exercises.find((e) => e.id === input.exerciseId);
     if (!exercise) {
-      throw new Error('Exercise not found.');
+      throw new Error('Liikettä ei löytynyt.');
     }
 
     const normalized = normalizeAndValidateSet(exercise, {
@@ -343,11 +344,11 @@ export class LocalRealtimeStore implements DataStore {
     const data = this.readFromStorage();
     const existing = data.sets.find((s) => s.id === setId);
     if (!existing) {
-      throw new Error('Set not found.');
+      throw new Error('Sarjaa ei löytynyt.');
     }
     const exercise = data.exercises.find((e) => e.id === existing.exerciseId);
     if (!exercise) {
-      throw new Error('Exercise not found.');
+      throw new Error('Liikettä ei löytynyt.');
     }
 
     const normalized = normalizeAndValidateSet(exercise, {
@@ -382,11 +383,11 @@ export class LocalRealtimeStore implements DataStore {
   async addLifter(input: { name: string; avatarColor: string }): Promise<Lifter> {
     const trimmed = input.name.trim();
     if (!trimmed) {
-      throw new Error('Enter a name for the new user.');
+      throw new Error('Anna uuden käyttäjän nimi.');
     }
     const data = this.readFromStorage();
     if (data.lifters.some((l) => l.name.toLowerCase() === trimmed.toLowerCase())) {
-      throw new Error(`A user named "${trimmed}" already exists.`);
+      throw new Error(`Käyttäjä nimeltä "${trimmed}" on jo olemassa.`);
     }
 
     const created: Lifter = {
@@ -409,17 +410,17 @@ export class LocalRealtimeStore implements DataStore {
     const data = this.readFromStorage();
     const actor = data.lifters.find((l) => l.id === actingLifterId);
     if (!actor?.isAdmin) {
-      throw new Error('Only Joel (admin) can delete users.');
+      throw new Error('Vain Joel (ylläpitäjä) voi poistaa käyttäjiä.');
     }
     if (targetLifterId === actingLifterId) {
-      throw new Error('Joel cannot delete his own admin account.');
+      throw new Error('Joel ei voi poistaa omaa ylläpitäjätiliään.');
     }
     const target = data.lifters.find((l) => l.id === targetLifterId);
     if (!target) {
-      throw new Error('User not found.');
+      throw new Error('Käyttäjää ei löytynyt.');
     }
     if (target.isAdmin) {
-      throw new Error('Cannot delete an admin user.');
+      throw new Error('Ylläpitäjää ei voi poistaa.');
     }
 
     const updatedSessions = data.sessions
@@ -451,17 +452,24 @@ export class LocalRealtimeStore implements DataStore {
   async addExercise(input: { name: string; category: ExerciseCategory }): Promise<Exercise> {
     const trimmed = input.name.trim();
     if (!trimmed) {
-      throw new Error('Enter an exercise name.');
+      throw new Error('Anna liikkeen nimi.');
     }
     const data = this.readFromStorage();
-    if (data.exercises.some((e) => e.name.toLowerCase() === trimmed.toLowerCase())) {
-      throw new Error(`"${trimmed}" already exists.`);
+    const candidateNormalized = localizeExerciseName(trimmed).toLowerCase();
+    if (
+      data.exercises.some(
+        (e) =>
+          e.name.toLowerCase() === trimmed.toLowerCase() ||
+          localizeExerciseName(e.name).toLowerCase() === candidateNormalized,
+      )
+    ) {
+      throw new Error(`Liike "${trimmed}" on jo olemassa.`);
     }
 
     const maxSort = data.exercises.reduce((max, e) => Math.max(max, e.sortOrder), 0);
     const created: Exercise = {
       id: generateId('ex'),
-      name: trimmed,
+      name: localizeExerciseName(trimmed),
       category: input.category,
       isBuiltin: false,
       sortOrder: maxSort + 1,
@@ -480,10 +488,10 @@ export class LocalRealtimeStore implements DataStore {
     const data = this.readFromStorage();
     const actor = data.lifters.find((l) => l.id === actingLifterId);
     if (!actor?.isAdmin) {
-      throw new Error('Only Joel (admin) can remove exercises.');
+      throw new Error('Vain Joel (ylläpitäjä) voi poistaa liikkeitä.');
     }
     if (!data.exercises.some((e) => e.id === targetExerciseId)) {
-      throw new Error('Exercise not found.');
+      throw new Error('Liikettä ei löytynyt.');
     }
 
     this.persistAndBroadcast({

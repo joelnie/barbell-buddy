@@ -22,33 +22,33 @@ export interface AccentOption {
 export const SECONDARY_ACCENT_OPTIONS: AccentOption[] = [
   {
     id: 'neon-green',
-    label: 'Neon Green',
+    label: 'Neonvihreä',
     swatchHex: '#39ff14',
-    description: 'High-voltage gym neon green',
+    description: 'Sähäkkä salin neonvihreä',
   },
   {
     id: 'turquoise',
-    label: 'Turquoise',
+    label: 'Turkoosi',
     swatchHex: '#14b8a6',
-    description: 'Crisp electric cyan-teal',
+    description: 'Raikas sähköinen turkoosi',
   },
   {
     id: 'bright-orange',
-    label: 'Bright Orange',
+    label: 'Kirkkaanoranssi',
     swatchHex: '#ff6b00',
-    description: 'Blazing barbell orange',
+    description: 'Hehkuva levytankooranssi',
   },
   {
     id: 'electric-blue',
-    label: 'Electric Blue',
+    label: 'Sähkönsininen',
     swatchHex: '#3b82f6',
-    description: 'Clean cobalt blue',
+    description: 'Puhdas koboltinsininen',
   },
   {
     id: 'vivid-purple',
-    label: 'Vivid Purple',
+    label: 'Kirkkaanvioletti',
     swatchHex: '#a855f7',
-    description: 'Bold ultraviolet accent',
+    description: 'Näyttävä ultravioletti korostus',
   },
 ];
 
