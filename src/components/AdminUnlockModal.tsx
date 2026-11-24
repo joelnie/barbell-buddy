@@ -1,45 +1,24 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Delete, Lock, ScanFace, X } from 'lucide-react';
+import { Delete, Lock, X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import {
-  hasEnrolledFaceId,
-  isPlatformFaceIdAvailable,
-  verifyFaceIdForAdmin,
-} from '../lib/webauthn';
 
 export function AdminUnlockModal() {
   const {
     pendingAdminTarget,
     cancelAdminUnlock,
     completeAdminUnlockWithPin,
-    completeAdminUnlockWithFaceId,
   } = useApp();
 
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [faceIdAvailable, setFaceIdAvailable] = useState(false);
-  const [faceIdEnrolled, setFaceIdEnrolled] = useState(false);
 
   useEffect(() => {
     if (!pendingAdminTarget) {
       setPin('');
       setError(null);
       setBusy(false);
-      return;
     }
-
-    let active = true;
-    const enrolled = hasEnrolledFaceId(pendingAdminTarget.id);
-    setFaceIdEnrolled(enrolled);
-
-    void isPlatformFaceIdAvailable().then((supported) => {
-      if (active) setFaceIdAvailable(supported);
-    });
-
-    return () => {
-      active = false;
-    };
   }, [pendingAdminTarget]);
 
   if (!pendingAdminTarget) return null;
@@ -80,24 +59,6 @@ export function AdminUnlockModal() {
     void submitPin(pin);
   };
 
-  const handleFaceIdUnlock = async () => {
-    if (busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const ok = await verifyFaceIdForAdmin(pendingAdminTarget.id);
-      if (ok) {
-        completeAdminUnlockWithFaceId();
-      } else {
-        setError('Face ID -tunnistus ei onnistunut. Käytä PIN-koodia.');
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Face ID -tunnistus peruutettiin.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
   return (
     <div
       role="dialog"
@@ -131,22 +92,9 @@ export function AdminUnlockModal() {
             Vaihda käyttäjäksi {pendingAdminTarget.name}
           </h2>
           <p className="mt-0.5 text-xs" style={{ color: 'var(--text-muted)' }}>
-            Syötä käyttäjän {pendingAdminTarget.name} 4-numeroinen ylläpitäjän PIN-koodi
-            {faceIdAvailable && faceIdEnrolled ? ' tai käytä Face ID:tä' : ''}.
+            Syötä käyttäjän {pendingAdminTarget.name} 4-numeroinen ylläpitäjän PIN-koodi.
           </p>
         </div>
-
-        {faceIdAvailable && faceIdEnrolled && (
-          <button
-            type="button"
-            onClick={handleFaceIdUnlock}
-            disabled={busy}
-            className="bb-pill-active mb-4 flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-bold transition active:scale-[0.98]"
-          >
-            <ScanFace className="h-5 w-5" />
-            <span>Avaa Face ID:llä</span>
-          </button>
-        )}
 
         <form onSubmit={handleFormSubmit}>
           <label htmlFor="joel-pin-input" className="sr-only">

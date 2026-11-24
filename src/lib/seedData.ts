@@ -4,7 +4,7 @@ export const STARTER_LIFTERS: Lifter[] = [
   {
     id: 'lifter-julie',
     name: 'Julie',
-    avatarColor: '#f43f5e',
+    avatarColor: '#ec4899',
     isAdmin: false,
     createdAt: '2026-01-01T08:00:00.000Z',
   },
@@ -21,6 +21,13 @@ export const STARTER_LIFTERS: Lifter[] = [
     avatarColor: '#3b82f6',
     isAdmin: false,
     createdAt: '2026-01-01T08:00:02.000Z',
+  },
+  {
+    id: 'lifter-tuomas',
+    name: 'Tuomas',
+    avatarColor: '#f59e0b',
+    isAdmin: false,
+    createdAt: '2026-01-01T08:00:03.000Z',
   },
 ];
 

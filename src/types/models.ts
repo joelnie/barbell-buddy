@@ -100,6 +100,7 @@ export interface DataStore {
   createSession(input: CreateSessionInput): Promise<WorkoutSession>;
   addParticipantToSession(sessionId: string, lifterId: string, now?: Date): Promise<void>;
   endSession(sessionId: string, now?: Date): Promise<void>;
+  deleteSession(sessionId: string): Promise<void>;
   addSet(input: AddSetInput): Promise<WorkoutSet>;
   updateSet(setId: string, patch: UpdateSetPatch): Promise<WorkoutSet>;
   deleteSet(setId: string): Promise<void>;

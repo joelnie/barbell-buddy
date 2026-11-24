@@ -1,14 +1,60 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
-  <rect width="512" height="512" rx="112" fill="#090d16"/>
-  <rect x="24" y="24" width="464" height="464" rx="92" stroke="#22c55e" stroke-width="12" stroke-opacity="0.7"/>
-  <!-- Barbell shaft -->
-  <rect x="148" y="240" width="216" height="32" rx="16" fill="#e2e8f0"/>
-  <!-- Left inner plate -->
-  <rect x="108" y="156" width="40" height="200" rx="16" fill="#22c55e"/>
-  <!-- Left outer plate -->
-  <rect x="64" y="188" width="36" height="136" rx="14" fill="#16a34a"/>
-  <!-- Right inner plate -->
-  <rect x="364" y="156" width="40" height="200" rx="16" fill="#22c55e"/>
-  <!-- Right outer plate -->
-  <rect x="412" y="188" width="36" height="136" rx="14" fill="#16a34a"/>
+  <defs>
+    <linearGradient id="bgGrad" x1="64" y1="32" x2="448" y2="480" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0f2847"/>
+      <stop offset="100%" stop-color="#071426"/>
+    </linearGradient>
+    <radialGradient id="glowGrad" cx="50%" cy="50%" r="52%">
+      <stop offset="0%" stop-color="#2dd4bf" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#2dd4bf" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="plateFront" x1="0" y1="145" x2="0" y2="380" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#5eead4"/>
+      <stop offset="48%" stop-color="#14b8a6"/>
+      <stop offset="100%" stop-color="#0d9488"/>
+    </linearGradient>
+    <linearGradient id="plateBack" x1="0" y1="155" x2="0" y2="375" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#2dd4bf"/>
+      <stop offset="100%" stop-color="#0f766e"/>
+    </linearGradient>
+    <linearGradient id="barMetal" x1="0" y1="242" x2="0" y2="286" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#f0fdfa"/>
+      <stop offset="55%" stop-color="#ccfbf1"/>
+      <stop offset="100%" stop-color="#99f6e4"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Modern Dark Blue Background -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)"/>
+  <rect width="512" height="512" rx="112" fill="url(#glowGrad)"/>
+
+  <!-- 3/4 Perspective Tilted Barbell -->
+  <g transform="rotate(-4.5 256 264)" stroke="#040b16" stroke-width="16" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Far-left bar end-cap -->
+    <rect x="36" y="243" width="54" height="42" rx="11" fill="url(#barMetal)"/>
+
+    <!-- Left outer plate (peeking on the left) -->
+    <ellipse cx="108" cy="264" rx="35" ry="102" fill="url(#plateBack)"/>
+
+    <!-- Left inner plate -->
+    <ellipse cx="144" cy="264" rx="41" ry="110" fill="url(#plateFront)"/>
+    <!-- Subtle highlight on left inner plate -->
+    <path d="M 134 176 C 122 198, 120 236, 122 268" stroke="#99f6e4" stroke-width="7" stroke-opacity="0.55" fill="none"/>
+
+    <!-- Far-right bar end-cap -->
+    <rect x="424" y="243" width="46" height="42" rx="11" fill="url(#barMetal)"/>
+
+    <!-- Right outer plate (peeking on the right) -->
+    <ellipse cx="400" cy="264" rx="37" ry="103" fill="url(#plateBack)"/>
+
+    <!-- Right inner plate -->
+    <ellipse cx="362" cy="264" rx="44" ry="112" fill="url(#plateFront)"/>
+    <!-- Subtle highlight on right inner plate -->
+    <path d="M 346 174 C 334 198, 332 236, 334 270" stroke="#99f6e4" stroke-width="7" stroke-opacity="0.55" fill="none"/>
+
+    <!-- Center shaft socketed from left inner plate to right inner plate -->
+    <rect x="138" y="244" width="222" height="40" rx="12" fill="url(#barMetal)"/>
+    <!-- Right collar socket curve -->
+    <path d="M 353 236 C 367 245, 367 283, 353 292" stroke="#040b16" stroke-width="15" fill="none"/>
+  </g>
 </svg>

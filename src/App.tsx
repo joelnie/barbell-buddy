@@ -29,10 +29,10 @@ function AppShell() {
   }
 
   return (
-    <div className="min-h-dvh pb-24">
+    <div className="flex min-h-dvh flex-col">
       <Header onSelectTab={setActiveTab} />
 
-      <main className="mx-auto max-w-lg px-4 pt-4">
+      <main className="bb-safe-main mx-auto w-full max-w-lg flex-1 px-4 pt-4">
         {activeTab === 'session' && <SessionTab />}
         {activeTab === 'history' && <HistoryTab />}
         {activeTab === 'progress' && <ProgressTab />}

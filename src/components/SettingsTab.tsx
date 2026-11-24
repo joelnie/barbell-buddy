@@ -1,11 +1,10 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import {
   Check,
   Dumbbell,
   Lock,
   Palette,
   RefreshCw,
-  ScanFace,
   ShieldCheck,
   Sparkles,
   Trash2,
@@ -15,12 +14,6 @@ import {
 import { useApp } from '../context/AppContext';
 import { SECONDARY_ACCENT_OPTIONS, useTheme } from '../context/ThemeContext';
 import { AVATAR_COLOR_SWATCHES } from '../lib/seedData';
-import {
-  clearEnrolledFaceId,
-  enrollFaceIdForAdmin,
-  hasEnrolledFaceId,
-  isPlatformFaceIdAvailable,
-} from '../lib/webauthn';
 import type { ExerciseCategory, ThemeMode } from '../types/models';
 
 export function SettingsTab() {
@@ -40,23 +33,7 @@ export function SettingsTab() {
   const [exerciseError, setExerciseError] = useState<string | null>(null);
   const [confirmDeleteExerciseId, setConfirmDeleteExerciseId] = useState<string | null>(null);
 
-  // Face ID state (only managed when active user is Joel / Admin)
-  const [faceIdSupported, setFaceIdSupported] = useState(false);
-  const [faceIdEnrolled, setFaceIdEnrolled] = useState(false);
-  const [faceIdNotice, setFaceIdNotice] = useState<string | null>(null);
-
   const isJoelAdmin = Boolean(mainUser?.isAdmin);
-
-  useEffect(() => {
-    let active = true;
-    setFaceIdEnrolled(hasEnrolledFaceId(mainUser?.id));
-    void isPlatformFaceIdAvailable().then((supported) => {
-      if (active) setFaceIdSupported(supported);
-    });
-    return () => {
-      active = false;
-    };
-  }, [mainUser?.id]);
 
   const handleAddUser = async (e: FormEvent) => {
     e.preventDefault();
@@ -111,24 +88,6 @@ export function SettingsTab() {
     }
   };
 
-  const handleEnrollFaceId = async () => {
-    if (!mainUser || !mainUser.isAdmin) return;
-    setFaceIdNotice(null);
-    try {
-      await enrollFaceIdForAdmin(mainUser);
-      setFaceIdEnrolled(true);
-      setFaceIdNotice('Face ID otettu käyttöön Joelin tiliä varten tällä laitteella.');
-    } catch (err) {
-      setFaceIdNotice(err instanceof Error ? err.message : 'Face ID:n käyttöönotto epäonnistui.');
-    }
-  };
-
-  const handleRemoveFaceId = () => {
-    clearEnrolledFaceId();
-    setFaceIdEnrolled(false);
-    setFaceIdNotice('Face ID poistettu tältä laitteelta. PIN-koodi on edelleen käytössä.');
-  };
-
   const themeChoices: { id: ThemeMode; label: string; subtitle: string; bgPreview: string }[] = [
     {
       id: 'light',
@@ -144,7 +103,7 @@ export function SettingsTab() {
     },
     {
       id: 'pink',
-      label: 'Pinkki / Vaaleanpunainen',
+      label: 'Pinkki',
       subtitle: 'Pehmeä ruusunpunainen hehku',
       bgPreview: '#fff1f5',
     },
@@ -152,14 +111,14 @@ export function SettingsTab() {
 
   return (
     <div className="space-y-4">
-      {/* 1. Switch Main User + Joel Face ID */}
+      {/* 1. Switch Main User */}
       <section className="bb-widget p-4">
         <div className="mb-3 flex items-center gap-2">
           <Users className="h-4 w-4" style={{ color: 'var(--accent-text)' }} />
           <div>
             <h2 className="text-base font-extrabold">Vaihda pääkäyttäjää</h2>
             <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-              Valitse kenen puhelin tämä on. Joelin tiliin vaihtaminen vaatii PIN-koodin tai Face ID:n.
+              Valitse kenen puhelin tämä on. Joelin tiliin vaihtaminen vaatii PIN-koodin.
             </p>
           </div>
         </div>
@@ -205,7 +164,7 @@ export function SettingsTab() {
                       {isCurrent
                         ? 'Aktiivinen tässä puhelimessa'
                         : lifter.isAdmin
-                          ? 'Vaatii 4-numeroisen PIN-koodin tai Face ID:n'
+                          ? 'Vaatii 4-numeroisen PIN-koodin'
                           : 'Vaihda napauttamalla'}
                     </div>
                   </div>
@@ -220,52 +179,6 @@ export function SettingsTab() {
             );
           })}
         </div>
-
-        {/* iPhone Face ID Management (only when verified as Joel) */}
-        {isJoelAdmin && (
-          <div className="bb-subcard mt-3.5 p-3">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <ScanFace className="h-5 w-5" style={{ color: 'var(--accent-text)' }} />
-                <div>
-                  <div className="text-xs font-bold">iPhone Face ID Joelille</div>
-                  <div className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-                    {faceIdEnrolled
-                      ? 'Käytössä tällä laitteella nopeaan vaihtoon Joelille.'
-                      : faceIdSupported
-                        ? 'Salli Face ID 4-numeroisen PIN-koodin rinnalla tällä laitteella.'
-                        : 'Face ID vaatii Safarin tai asennetun PWA-sovelluksen iPhonessa HTTPS-yhteydellä.'}
-                  </div>
-                </div>
-              </div>
-
-              {faceIdEnrolled ? (
-                <button
-                  type="button"
-                  onClick={handleRemoveFaceId}
-                  className="rounded-lg px-2.5 py-1.5 text-xs font-bold"
-                  style={{ backgroundColor: 'var(--danger-soft)', color: 'var(--danger)' }}
-                >
-                  Poista
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  disabled={!faceIdSupported}
-                  onClick={handleEnrollFaceId}
-                  className="bb-btn-primary px-3 py-1.5 text-xs"
-                >
-                  Ota Face ID käyttöön
-                </button>
-              )}
-            </div>
-            {faceIdNotice && (
-              <p className="mt-2 text-[11px] font-semibold" style={{ color: 'var(--accent-text)' }}>
-                {faceIdNotice}
-              </p>
-            )}
-          </div>
-        )}
       </section>
 
       {/* 2. Color Theme & Secondary App Color */}
@@ -323,14 +236,14 @@ export function SettingsTab() {
               className="text-xs font-bold uppercase tracking-wider"
               style={{ color: 'var(--text-muted)' }}
             >
-              Korostusväri (korttien reunukset ja tehosteet)
+              Korostusväri
             </span>
             <Sparkles className="h-3.5 w-3.5" style={{ color: 'var(--accent-text)' }} />
           </div>
 
           {theme === 'pink' ? (
             <p className="bb-subcard px-3 py-2.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
-              Pinkki / Vaaleanpunainen teema käyttää pehmeitä ruusunpunaisia reunuksia automaattisesti.
+              Pinkki teema käyttää pehmeitä ruusunpunaisia reunuksia automaattisesti.
               Vaihda <strong>Vaalea</strong>- tai <strong>Tumma</strong>-teemaan valitaksesi oman korostusvärin.
             </p>
           ) : (

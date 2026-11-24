@@ -1,14 +1,16 @@
 import { useMemo, useState } from 'react';
-import { CalendarClock, ChevronDown, ChevronUp, Dumbbell } from 'lucide-react';
+import { CalendarClock, ChevronDown, ChevronUp, Dumbbell, Trash2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { formatTimeShort } from '../lib/dates';
 import { formatSetLoad } from '../lib/metrics';
 import type { WorkoutSet } from '../types/models';
 
 export function HistoryTab() {
-  const { snapshot, completedSessions } = useApp();
+  const { store, snapshot, completedSessions } = useApp();
   const [lifterFilter, setLifterFilter] = useState<string>('all');
   const [expandedSessionIds, setExpandedSessionIds] = useState<Set<string>>(() => new Set());
+  const [confirmDeleteSessionId, setConfirmDeleteSessionId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const lifterMap = useMemo(
     () => new Map(snapshot.lifters.map((l) => [l.id, l])),
@@ -91,6 +93,16 @@ export function HistoryTab() {
         </div>
       </section>
 
+      {deleteError && (
+        <p
+          role="alert"
+          className="rounded-xl px-3 py-2 text-xs font-semibold"
+          style={{ backgroundColor: 'var(--danger-soft)', color: 'var(--danger)' }}
+        >
+          {deleteError}
+        </p>
+      )}
+
       {filteredSessions.length === 0 ? (
         <section className="bb-widget flex flex-col items-center p-8 text-center">
           <CalendarClock className="mb-2.5 h-8 w-8" style={{ color: 'var(--text-muted)' }} />
@@ -129,65 +141,126 @@ export function HistoryTab() {
               }
             }
 
+            const isConfirmingDelete = confirmDeleteSessionId === session.id;
+
             return (
               <article key={session.id} className="bb-widget overflow-hidden">
-                <button
-                  type="button"
-                  aria-expanded={isExpanded}
-                  onClick={() => toggleExpand(session.id)}
-                  className="flex w-full items-center justify-between gap-3 p-4 text-left transition hover:opacity-95"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-base font-extrabold">{session.sessionDate}</span>
-                      <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-                        {formatTimeShort(session.startedAt)}
-                      </span>
-                      <span
-                        className="rounded-full px-2 py-0.5 text-[11px] font-bold"
-                        style={{
-                          backgroundColor: 'var(--accent-soft)',
-                          color: 'var(--accent-text)',
-                        }}
-                      >
-                        {sessionSets.length} {sessionSets.length === 1 ? 'sarja' : 'sarjaa'}
-                      </span>
-                    </div>
-
-                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                      {participants.map((p) => (
+                <div className="flex items-center gap-2 p-4">
+                  <button
+                    type="button"
+                    aria-expanded={isExpanded}
+                    onClick={() => toggleExpand(session.id)}
+                    className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left transition hover:opacity-95"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-base font-extrabold">{session.sessionDate}</span>
+                        <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                          {formatTimeShort(session.startedAt)}
+                        </span>
                         <span
-                          key={p.id}
-                          className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                          className="rounded-full px-2 py-0.5 text-[11px] font-bold"
                           style={{
-                            backgroundColor: 'var(--bg-elevated)',
-                            border: '1px solid var(--border-subtle)',
+                            backgroundColor: 'var(--accent-soft)',
+                            color: 'var(--accent-text)',
                           }}
                         >
-                          <span
-                            className="h-2 w-2 rounded-full"
-                            style={{ backgroundColor: p.avatarColor }}
-                          />
-                          {p.name}
+                          {sessionSets.length} {sessionSets.length === 1 ? 'sarja' : 'sarjaa'}
                         </span>
-                      ))}
+                      </div>
+
+                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                        {participants.map((p) => (
+                          <span
+                            key={p.id}
+                            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                            style={{
+                              backgroundColor: 'var(--bg-elevated)',
+                              border: '1px solid var(--border-subtle)',
+                            }}
+                          >
+                            <span
+                              className="h-2 w-2 rounded-full"
+                              style={{ backgroundColor: p.avatarColor }}
+                            />
+                            {p.name}
+                          </span>
+                        ))}
+                      </div>
+
+                      {uniqueExercises.length > 0 && (
+                        <p className="mt-1.5 truncate text-xs" style={{ color: 'var(--text-muted)' }}>
+                          {uniqueExercises.join(' · ')}
+                        </p>
+                      )}
                     </div>
 
-                    {uniqueExercises.length > 0 && (
-                      <p className="mt-1.5 truncate text-xs" style={{ color: 'var(--text-muted)' }}>
-                        {uniqueExercises.join(' · ')}
-                      </p>
-                    )}
-                  </div>
+                    <div style={{ color: 'var(--accent-text)' }}>
+                      {isExpanded ? (
+                        <ChevronUp className="h-5 w-5" />
+                      ) : (
+                        <ChevronDown className="h-5 w-5" />
+                      )}
+                    </div>
+                  </button>
 
-                  <div style={{ color: 'var(--accent-text)' }}>
-                    {isExpanded ? (
-                      <ChevronUp className="h-5 w-5" />
-                    ) : (
-                      <ChevronDown className="h-5 w-5" />
-                    )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeleteError(null);
+                      setConfirmDeleteSessionId((prev) => (prev === session.id ? null : session.id));
+                    }}
+                    aria-label="Poista treeni"
+                    title="Poista treeni"
+                    className="shrink-0 rounded-xl p-2 transition hover:opacity-80 active:scale-95"
+                    style={{ color: 'var(--danger)' }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+
+                {isConfirmingDelete && (
+                  <div
+                    className="flex flex-wrap items-center justify-between gap-2 border-t px-4 py-3"
+                    style={{
+                      borderColor: 'var(--border-subtle)',
+                      backgroundColor: 'var(--danger-soft)',
+                    }}
+                  >
+                    <span className="text-xs font-extrabold" style={{ color: 'var(--danger)' }}>
+                      Oletko varma? Treeni poistetaan pysyvästi.
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setDeleteError(null);
+                          try {
+                            await store.deleteSession(session.id);
+                            setConfirmDeleteSessionId(null);
+                          } catch (err) {
+                            setDeleteError(
+                              err instanceof Error
+                                ? err.message
+                                : 'Treenin poistaminen epäonnistui.',
+                            );
+                          }
+                        }}
+                        className="rounded-lg px-3 py-1.5 text-xs font-bold text-white"
+                        style={{ backgroundColor: 'var(--danger)' }}
+                      >
+                        Poista
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDeleteSessionId(null)}
+                        className="bb-pill-idle rounded-lg px-3 py-1.5 text-xs font-semibold"
+                      >
+                        Peruuta
+                      </button>
+                    </div>
                   </div>
-                </button>
+                )}
 
                 {isExpanded && (
                   <div

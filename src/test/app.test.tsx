@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from '../App';
@@ -24,12 +24,13 @@ async function enterJoelKeypadPin(user: ReturnType<typeof userEvent.setup>, digi
 }
 
 describe('Barbell Buddy PWA (Suomi)', () => {
-  it('seeds Julie, Joel, and Leevi plus all 5 starter exercises in Finnish and localizes English DB rows', async () => {
+  it('seeds Julie (pink), Joel, Leevi, and Tuomas plus all 5 starter exercises in Finnish and migrates legacy stores', async () => {
     const store = new LocalRealtimeStore({ storageKey: 'test-seed' });
     await store.initialize();
     const snap = store.getSnapshot();
 
-    expect(snap.lifters.map((l) => l.name)).toEqual(['Julie', 'Joel', 'Leevi']);
+    expect(snap.lifters.map((l) => l.name)).toEqual(['Julie', 'Joel', 'Leevi', 'Tuomas']);
+    expect(snap.lifters.find((l) => l.name === 'Julie')?.avatarColor).toBe('#ec4899');
     expect(snap.lifters.find((l) => l.name === 'Joel')?.isAdmin).toBe(true);
     expect(snap.exercises.map((e) => e.name)).toEqual([
       'Leuanveto',
@@ -38,6 +39,27 @@ describe('Barbell Buddy PWA (Suomi)', () => {
       'Maastaveto',
       'Kyykky',
     ]);
+
+    // Legacy localStorage store with red Julie (#f43f5e) and without Tuomas auto-migrates once
+    localStorage.setItem(
+      'test-legacy-migration',
+      JSON.stringify({
+        lifters: [
+          { id: 'lifter-julie', name: 'Julie', avatarColor: '#f43f5e', isAdmin: false, createdAt: '2026-01-01T00:00:00Z' },
+          { id: 'lifter-joel', name: 'Joel', avatarColor: '#10b981', isAdmin: true, createdAt: '2026-01-01T00:00:01Z' },
+          { id: 'lifter-leevi', name: 'Leevi', avatarColor: '#3b82f6', isAdmin: false, createdAt: '2026-01-01T00:00:02Z' },
+        ],
+        exercises: STARTER_EXERCISES,
+        sessions: [],
+        sets: [],
+      }),
+    );
+    const migratedStore = new LocalRealtimeStore({ storageKey: 'test-legacy-migration' });
+    await migratedStore.initialize();
+    const migratedLifters = migratedStore.getSnapshot().lifters;
+    expect(migratedLifters.map((l) => l.name)).toEqual(['Julie', 'Joel', 'Leevi', 'Tuomas']);
+    expect(migratedLifters.find((l) => l.name === 'Julie')?.avatarColor).toBe('#ec4899');
+    migratedStore.dispose();
 
     // Existing English Supabase / localStorage exercise rows localize seamlessly to Finnish
     expect(localizeExerciseName('Pull-ups')).toBe('Leuanveto');
@@ -222,11 +244,11 @@ describe('Barbell Buddy PWA (Suomi)', () => {
     storeB.dispose();
   });
 
-  it('defines exact discrete slider stops for Reps (1-30), Pull-ups (Kuminauha/Kehonpaino/+kg), Bench, Squat, Deadlift (25-180), and Dumbbells', () => {
+  it('defines exact discrete slider stops for Reps (1-20), Pull-ups (Kuminauha/Kehonpaino/+kg), Bench, Squat, Deadlift (25-180), and Dumbbells', () => {
     const repsStops = getRepsSliderStops();
-    expect(repsStops).toHaveLength(30);
+    expect(repsStops).toHaveLength(20);
     expect(repsStops[0].rawValue).toBe(1);
-    expect(repsStops[29].rawValue).toBe(30);
+    expect(repsStops[19].rawValue).toBe(20);
 
     const pullups = STARTER_EXERCISES.find((e) => e.id === 'ex-pullups')!;
     expect(getRawWeightOptionsForExercise(pullups)).toEqual([
@@ -451,50 +473,62 @@ describe('Barbell Buddy PWA (Suomi)', () => {
     expect(store.getSnapshot().sessions[0].status).toBe('completed');
     expect(store.getSnapshot().sessions[0].endedAt).toBe(session.expiresAt);
 
-    // Open Historia tab and click the 2026-11-20 session -> shows Maastaveto 160 kg x 4 toistoa
+    // Open Historia tab, inspect the 2026-11-20 session, and test deleting old sessions with "Oletko varma?" confirmation
     localStorage.setItem('history-user', 'lifter-julie');
     render(<App store={store} mainUserStorageKey="history-user" />);
+
+    // Idle Uusi treeni card must NOT show "valmista tänään" even if a session was completed today
+    await act(async () => {
+      const todayCompleted = await store.createSession({
+        createdBy: 'lifter-julie',
+        participantIds: ['lifter-julie'],
+      });
+      await store.endSession(todayCompleted.id);
+    });
+    expect(screen.queryByText(/valmista tänään/i)).not.toBeInTheDocument();
+
     await user.click(await screen.findByRole('tab', { name: /Historia/i }));
 
     const sessionCardButton = await screen.findByRole('button', { name: /2026-11-20/i });
     await user.click(sessionCardButton);
     expect(await screen.findByText(/160 kg × 4 toistoa/i)).toBeInTheDocument();
 
+    // Delete the 2026-11-20 session via "Oletko varma?" confirmation
+    const cardArticle = sessionCardButton.closest('article')!;
+    await user.click(within(cardArticle).getByRole('button', { name: 'Poista treeni' }));
+    expect(within(cardArticle).getByText(/Oletko varma\?/i)).toBeInTheDocument();
+
+    // Cancel keeps the session
+    await user.click(within(cardArticle).getByRole('button', { name: 'Peruuta' }));
+    expect(within(cardArticle).queryByText(/Oletko varma\?/i)).not.toBeInTheDocument();
+
+    // Confirm removes the session and its sets
+    await user.click(within(cardArticle).getByRole('button', { name: 'Poista treeni' }));
+    await user.click(within(cardArticle).getByRole('button', { name: 'Poista' }));
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /2026-11-20/i })).not.toBeInTheDocument();
+    });
+    expect(store.getSnapshot().sets).toHaveLength(0);
+
     store.dispose();
   });
 
-  it('requires Joel PIN or iPhone Face ID when switching to Joel and restricts deletions to Joel only', async () => {
+  it('requires Joel PIN (without Face ID) when switching to Joel and restricts user/exercise deletions to Joel only', async () => {
     const user = userEvent.setup();
-    const store = new LocalRealtimeStore({ storageKey: 'test-admin-pin-faceid' });
+    const store = new LocalRealtimeStore({ storageKey: 'test-admin-pin-only' });
     await store.initialize();
-
-    // Mock WebAuthn platform authenticator for iPhone Face ID
-    const mockRawId = new Uint8Array([11, 22, 33, 44, 55, 66]).buffer;
-    Object.defineProperty(window, 'PublicKeyCredential', {
-      value: {
-        isUserVerifyingPlatformAuthenticatorAvailable: vi.fn().mockResolvedValue(true),
-      },
-      configurable: true,
-      writable: true,
-    });
-    Object.defineProperty(navigator, 'credentials', {
-      value: {
-        create: vi.fn().mockResolvedValue({ id: 'faceid-cred-1', rawId: mockRawId }),
-        get: vi.fn().mockResolvedValue({ id: 'faceid-cred-1', rawId: mockRawId }),
-      },
-      configurable: true,
-      writable: true,
-    });
 
     render(<App store={store} mainUserStorageKey="admin-test-user" />);
 
-    // First-visit onboarding: pick Julie (no PIN needed)
+    // First-visit onboarding: pick Julie (no PIN needed) and verify Face ID text is gone
     const onboarding = await screen.findByRole('dialog', { name: /kuka käyttää tätä puhelinta/i });
+    expect(within(onboarding).queryByText(/Face ID/i)).not.toBeInTheDocument();
     await user.click(within(onboarding).getByRole('button', { name: /Julie/i }));
     expect(await screen.findByTestId('idle-hero-greeting')).toBeInTheDocument();
 
     // Navigate to Asetukset as Julie
     await user.click(screen.getByRole('tab', { name: /Asetukset/i }));
+    expect(screen.queryByText(/Face ID/i)).not.toBeInTheDocument();
 
     // Julie CAN add a new user ("Alex") and a new exercise ("Pystypunnerrus")
     await user.type(screen.getByLabelText('Uuden käyttäjän nimi'), 'Alex');
@@ -533,13 +567,7 @@ describe('Barbell Buddy PWA (Suomi)', () => {
         screen.queryByRole('dialog', { name: /vaihda käyttäjäksi joel/i }),
       ).not.toBeInTheDocument();
     });
-
-    // Now active as Joel -> can enroll iPhone Face ID
-    const enableFaceIdBtn = await screen.findByRole('button', { name: /Ota Face ID käyttöön/i });
-    await user.click(enableFaceIdBtn);
-    expect(
-      await screen.findByText(/Face ID otettu käyttöön Joelin tiliä varten/i),
-    ).toBeInTheDocument();
+    expect(screen.queryByText(/Face ID/i)).not.toBeInTheDocument();
 
     // As Joel, delete Alex and remove Pystypunnerrus (while Joel cannot delete himself)
     expect(screen.queryByRole('button', { name: /Poista käyttäjä Joel/i })).not.toBeInTheDocument();
@@ -558,24 +586,10 @@ describe('Barbell Buddy PWA (Suomi)', () => {
       expect(store.getSnapshot().exercises.some((e) => e.name === 'Pystypunnerrus')).toBe(false);
     });
 
-    // Switch to Leevi (no PIN), then switch back to Joel using enrolled Face ID!
-    await user.click(screen.getByRole('button', { name: /Leevi.*Vaihda napauttamalla/i }));
-    await user.click(screen.getByRole('button', { name: /Joel.*Vaatii 4-numeroisen PIN-koodin/i }));
-
-    const faceIdBtn = await screen.findByRole('button', { name: /Avaa Face ID:llä/i });
-    await user.click(faceIdBtn);
-
-    await waitFor(() => {
-      expect(
-        screen.queryByRole('dialog', { name: /vaihda käyttäjäksi joel/i }),
-      ).not.toBeInTheDocument();
-    });
-    expect(navigator.credentials.get).toHaveBeenCalledTimes(1);
-
     store.dispose();
   });
 
-  it('switches between Vaalea, Tumma, and Pinkki themes and applies Finnish Secondary App Colors', async () => {
+  it('switches between Vaalea, Tumma, and Pinkki themes and displays concise Korostusväri label', async () => {
     const user = userEvent.setup();
     const store = new LocalRealtimeStore({ storageKey: 'test-themes' });
     await store.initialize();
@@ -591,6 +605,11 @@ describe('Barbell Buddy PWA (Suomi)', () => {
     render(<App store={store} mainUserStorageKey="theme-test-user" />);
 
     await user.click(await screen.findByRole('tab', { name: /Asetukset/i }));
+
+    expect(screen.getByText('Korostusväri')).toBeInTheDocument();
+    expect(
+      screen.queryByText('Korostusväri (korttien reunukset ja tehosteet)'),
+    ).not.toBeInTheDocument();
 
     const themeGroup = screen.getByRole('group', { name: /Väriteema/i });
     const accentGroup = screen.getByRole('group', { name: /Sovelluksen korostusväri/i });
@@ -612,9 +631,10 @@ describe('Barbell Buddy PWA (Suomi)', () => {
     await user.click(within(lightAccentGroup).getByRole('button', { name: /Neonvihreä/i }));
     expect(document.documentElement.getAttribute('data-accent')).toBe('neon-green');
 
-    await user.click(
-      within(themeGroup).getByRole('button', { name: /Pinkki \/ Vaaleanpunainen/i }),
-    );
+    await user.click(within(themeGroup).getByRole('button', { name: /^Pinkki$/i }));
+    expect(
+      within(themeGroup).queryByRole('button', { name: /Vaaleanpunainen/i }),
+    ).not.toBeInTheDocument();
     expect(document.documentElement.getAttribute('data-theme')).toBe('pink');
     expect(meta.getAttribute('content')).toBe('#fff1f5');
 
@@ -741,6 +761,22 @@ describe('Barbell Buddy PWA (Suomi)', () => {
     await user.click(screen.getByRole('button', { name: 'Joel' }));
     expect(weightSlider).toHaveAttribute('aria-valuetext', '97.5 kg');
     expect(repsSlider).toHaveAttribute('aria-valuetext', '4 toistoa');
+
+    // Switch exercise to Vinopenkki käsipainoilla -> Weight slider label updates to "Paino (x2)"
+    await user.selectOptions(screen.getByLabelText('Liike'), 'ex-incline-db-bench');
+    expect(screen.getByRole('slider', { name: 'Paino (x2)' })).toBeInTheDocument();
+
+    // Store enforces max 20 reps
+    await expect(
+      store.addSet({
+        sessionId: store.getSnapshot().sessions[0].id,
+        lifterId: 'lifter-joel',
+        exerciseId: 'ex-bench-press',
+        weightKg: 80,
+        reps: 21,
+        loggedBy: 'lifter-joel',
+      }),
+    ).rejects.toThrow(/1–20/);
 
     store.dispose();
   });

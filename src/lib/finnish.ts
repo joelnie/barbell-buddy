@@ -87,3 +87,14 @@ export function isDeadliftExercise(exercise: Pick<Exercise, 'id' | 'name'>): boo
   const norm = exercise.name.trim().toLowerCase();
   return exercise.id === 'ex-deadlift' || norm === 'deadlift' || norm === 'maastaveto';
 }
+
+export function isInclineDumbbellBenchExercise(
+  exercise: Pick<Exercise, 'id' | 'name'>,
+): boolean {
+  const norm = exercise.name.trim().toLowerCase();
+  return (
+    exercise.id === 'ex-incline-db-bench' ||
+    norm === 'incline dumbbell bench press' ||
+    norm === 'vinopenkki käsipainoilla'
+  );
+}

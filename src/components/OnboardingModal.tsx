@@ -65,7 +65,7 @@ export function OnboardingModal() {
                     )}
                   </div>
                   <div className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-                    {lifter.isAdmin ? 'PIN-koodi tai Face ID vaaditaan' : 'Jatka napauttamalla'}
+                    {lifter.isAdmin ? 'PIN-koodi vaaditaan' : 'Jatka napauttamalla'}
                   </div>
                 </div>
               </div>
