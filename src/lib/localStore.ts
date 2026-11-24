@@ -1,0 +1,511 @@
+import type {
+  AddSetInput,
+  CreateSessionInput,
+  DataStore,
+  Exercise,
+  ExerciseCategory,
+  Lifter,
+  StoreSnapshot,
+  UpdateSetPatch,
+  WorkoutSession,
+  WorkoutSet,
+} from '../types/models';
+import { verifyAdminPinHash } from './adminAuth';
+import { computeSessionExpiryIso, formatLocalDate, isSessionActiveAt } from './dates';
+import { normalizeAndValidateSet } from './metrics';
+import { STARTER_EXERCISES, STARTER_LIFTERS } from './seedData';
+
+const DEFAULT_STORAGE_KEY = 'bb_local_store_v1';
+const DEFAULT_CHANNEL_NAME = 'barbell-buddy-sync-v1';
+
+interface PersistedLocalData {
+  lifters: Lifter[];
+  exercises: Exercise[];
+  sessions: WorkoutSession[];
+  sets: WorkoutSet[];
+}
+
+function generateId(prefix: string): string {
+  if (typeof globalThis.crypto !== 'undefined' && typeof globalThis.crypto.randomUUID === 'function') {
+    return `${prefix}-${globalThis.crypto.randomUUID()}`;
+  }
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function createInitialPersistedData(): PersistedLocalData {
+  return {
+    lifters: STARTER_LIFTERS.map((l) => ({ ...l })),
+    exercises: STARTER_EXERCISES.map((e) => ({ ...e })),
+    sessions: [],
+    sets: [],
+  };
+}
+
+export interface LocalStoreOptions {
+  storageKey?: string;
+  channelName?: string;
+}
+
+export class LocalRealtimeStore implements DataStore {
+  private readonly storageKey: string;
+  private readonly channelName: string;
+  private readonly instanceId: string;
+  private channel: BroadcastChannel | null = null;
+  private listeners = new Set<() => void>();
+  private snapshot: StoreSnapshot;
+  private storageHandler: ((e: StorageEvent) => void) | null = null;
+
+  constructor(options: LocalStoreOptions = {}) {
+    this.storageKey = options.storageKey ?? DEFAULT_STORAGE_KEY;
+    this.channelName = options.channelName ?? DEFAULT_CHANNEL_NAME;
+    this.instanceId = generateId('inst');
+    const data = this.readFromStorage();
+    this.snapshot = this.buildSnapshot(data);
+  }
+
+  private readFromStorage(): PersistedLocalData {
+    try {
+      const raw = localStorage.getItem(this.storageKey);
+      if (!raw) {
+        const seeded = createInitialPersistedData();
+        localStorage.setItem(this.storageKey, JSON.stringify(seeded));
+        return seeded;
+      }
+      const parsed = JSON.parse(raw) as Partial<PersistedLocalData>;
+      return {
+        lifters: Array.isArray(parsed.lifters) && parsed.lifters.length > 0 ? parsed.lifters : createInitialPersistedData().lifters,
+        exercises:
+          Array.isArray(parsed.exercises) && parsed.exercises.length > 0
+            ? parsed.exercises
+            : createInitialPersistedData().exercises,
+        sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
+        sets: Array.isArray(parsed.sets) ? parsed.sets : [],
+      };
+    } catch {
+      return createInitialPersistedData();
+    }
+  }
+
+  private buildSnapshot(data: PersistedLocalData): StoreSnapshot {
+    const sortedExercises = [...data.exercises].sort(
+      (a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name),
+    );
+    const sortedSessions = [...data.sessions].sort(
+      (a, b) => b.sessionDate.localeCompare(a.sessionDate) || b.startedAt.localeCompare(a.startedAt),
+    );
+    const sortedSets = [...data.sets].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+
+    return {
+      lifters: [...data.lifters],
+      exercises: sortedExercises,
+      sessions: sortedSessions,
+      sets: sortedSets,
+      syncStatus: 'synced',
+      mode: 'local',
+      authRequired: false,
+    };
+  }
+
+  private persistAndBroadcast(data: PersistedLocalData): void {
+    localStorage.setItem(this.storageKey, JSON.stringify(data));
+    this.snapshot = this.buildSnapshot(data);
+    this.emit();
+    if (this.channel) {
+      try {
+        this.channel.postMessage({ senderId: this.instanceId, updatedAt: Date.now() });
+      } catch {
+        // Ignore closed channel errors
+      }
+    }
+  }
+
+  private emit(): void {
+    for (const listener of this.listeners) {
+      listener();
+    }
+  }
+
+  getSnapshot(): StoreSnapshot {
+    return this.snapshot;
+  }
+
+  subscribe(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  async initialize(): Promise<void> {
+    if (typeof BroadcastChannel !== 'undefined' && !this.channel) {
+      this.channel = new BroadcastChannel(this.channelName);
+      this.channel.onmessage = (event: MessageEvent<{ senderId?: string }>) => {
+        if (event.data?.senderId === this.instanceId) return;
+        const fresh = this.readFromStorage();
+        this.snapshot = this.buildSnapshot(fresh);
+        this.emit();
+      };
+    }
+
+    if (typeof window !== 'undefined' && !this.storageHandler) {
+      this.storageHandler = (e: StorageEvent) => {
+        if (e.key !== this.storageKey) return;
+        const fresh = this.readFromStorage();
+        this.snapshot = this.buildSnapshot(fresh);
+        this.emit();
+      };
+      window.addEventListener('storage', this.storageHandler);
+    }
+
+    await this.sweepExpiredSessions();
+  }
+
+  async refresh(now: Date = new Date()): Promise<void> {
+    const fresh = this.readFromStorage();
+    this.snapshot = this.buildSnapshot(fresh);
+    this.emit();
+    await this.sweepExpiredSessions(now);
+  }
+
+  async sweepExpiredSessions(now: Date = new Date()): Promise<number> {
+    const data = this.readFromStorage();
+    let sweptCount = 0;
+
+    const updatedSessions = data.sessions.map((session) => {
+      if (session.status === 'active' && !isSessionActiveAt(session, now)) {
+        sweptCount += 1;
+        return {
+          ...session,
+          status: 'completed' as const,
+          endedAt: session.endedAt ?? session.expiresAt,
+        };
+      }
+      return session;
+    });
+
+    if (sweptCount > 0) {
+      this.persistAndBroadcast({
+        ...data,
+        sessions: updatedSessions,
+      });
+    }
+    return sweptCount;
+  }
+
+  async createSession(input: CreateSessionInput): Promise<WorkoutSession> {
+    const now = input.now ?? new Date();
+    await this.sweepExpiredSessions(now);
+    const data = this.readFromStorage();
+
+    const uniqueParticipants = Array.from(new Set(input.participantIds.filter(Boolean)));
+    if (uniqueParticipants.length === 0) {
+      throw new Error('Select at least one lifter for the session.');
+    }
+
+    for (const pid of uniqueParticipants) {
+      if (!data.lifters.some((l) => l.id === pid)) {
+        throw new Error('Unknown lifter selected.');
+      }
+      const alreadyActive = data.sessions.find(
+        (s) => isSessionActiveAt(s, now) && s.participantIds.includes(pid),
+      );
+      if (alreadyActive) {
+        const lifterName = data.lifters.find((l) => l.id === pid)?.name ?? 'Lifter';
+        throw new Error(`${lifterName} is already in an active session.`);
+      }
+    }
+
+    const sessionDate = input.sessionDate ?? formatLocalDate(now);
+    const session: WorkoutSession = {
+      id: generateId('sess'),
+      sessionDate,
+      status: 'active',
+      createdBy: input.createdBy,
+      participantIds: uniqueParticipants,
+      startedAt: now.toISOString(),
+      endedAt: null,
+      expiresAt: computeSessionExpiryIso(sessionDate),
+    };
+
+    this.persistAndBroadcast({
+      ...data,
+      sessions: [session, ...data.sessions],
+    });
+
+    return session;
+  }
+
+  async addParticipantToSession(
+    sessionId: string,
+    lifterId: string,
+    now: Date = new Date(),
+  ): Promise<void> {
+    await this.sweepExpiredSessions(now);
+    const data = this.readFromStorage();
+    const target = data.sessions.find((s) => s.id === sessionId);
+    if (!target || !isSessionActiveAt(target, now)) {
+      throw new Error('This session is no longer active.');
+    }
+    if (!data.lifters.some((l) => l.id === lifterId)) {
+      throw new Error('Lifter not found.');
+    }
+    if (target.participantIds.includes(lifterId)) {
+      return;
+    }
+
+    const conflict = data.sessions.find(
+      (s) => s.id !== sessionId && isSessionActiveAt(s, now) && s.participantIds.includes(lifterId),
+    );
+    if (conflict) {
+      const lifterName = data.lifters.find((l) => l.id === lifterId)?.name ?? 'Lifter';
+      throw new Error(`${lifterName} is already in another active session.`);
+    }
+
+    const updatedSessions = data.sessions.map((s) =>
+      s.id === sessionId ? { ...s, participantIds: [...s.participantIds, lifterId] } : s,
+    );
+
+    this.persistAndBroadcast({
+      ...data,
+      sessions: updatedSessions,
+    });
+  }
+
+  async endSession(sessionId: string, now: Date = new Date()): Promise<void> {
+    const data = this.readFromStorage();
+    const target = data.sessions.find((s) => s.id === sessionId);
+    if (!target) {
+      throw new Error('Session not found.');
+    }
+    if (target.status === 'completed') return;
+
+    const updatedSessions = data.sessions.map((s) =>
+      s.id === sessionId
+        ? {
+            ...s,
+            status: 'completed' as const,
+            endedAt: now.toISOString(),
+          }
+        : s,
+    );
+
+    this.persistAndBroadcast({
+      ...data,
+      sessions: updatedSessions,
+    });
+  }
+
+  async addSet(input: AddSetInput): Promise<WorkoutSet> {
+    const data = this.readFromStorage();
+    const session = data.sessions.find((s) => s.id === input.sessionId);
+    if (!session) {
+      throw new Error('Session not found.');
+    }
+    if (!session.participantIds.includes(input.lifterId)) {
+      throw new Error('Selected lifter is not a participant in this session.');
+    }
+    if (input.loggedBy && !session.participantIds.includes(input.loggedBy)) {
+      throw new Error('Only participants of this session can add sets to it.');
+    }
+
+    const exercise = data.exercises.find((e) => e.id === input.exerciseId);
+    if (!exercise) {
+      throw new Error('Exercise not found.');
+    }
+
+    const normalized = normalizeAndValidateSet(exercise, {
+      pullupMode: input.pullupMode,
+      weightKg: input.weightKg,
+      reps: input.reps,
+    });
+
+    const created: WorkoutSet = {
+      id: generateId('set'),
+      sessionId: input.sessionId,
+      lifterId: input.lifterId,
+      exerciseId: input.exerciseId,
+      pullupMode: normalized.pullupMode,
+      weightKg: normalized.weightKg,
+      reps: normalized.reps,
+      loggedBy: input.loggedBy,
+      createdAt: new Date().toISOString(),
+    };
+
+    this.persistAndBroadcast({
+      ...data,
+      sets: [...data.sets, created],
+    });
+
+    return created;
+  }
+
+  async updateSet(setId: string, patch: UpdateSetPatch): Promise<WorkoutSet> {
+    const data = this.readFromStorage();
+    const existing = data.sets.find((s) => s.id === setId);
+    if (!existing) {
+      throw new Error('Set not found.');
+    }
+    const exercise = data.exercises.find((e) => e.id === existing.exerciseId);
+    if (!exercise) {
+      throw new Error('Exercise not found.');
+    }
+
+    const normalized = normalizeAndValidateSet(exercise, {
+      pullupMode: patch.pullupMode !== undefined ? patch.pullupMode : existing.pullupMode,
+      weightKg: patch.weightKg !== undefined ? patch.weightKg : existing.weightKg,
+      reps: patch.reps,
+    });
+
+    const updated: WorkoutSet = {
+      ...existing,
+      pullupMode: normalized.pullupMode,
+      weightKg: normalized.weightKg,
+      reps: normalized.reps,
+    };
+
+    this.persistAndBroadcast({
+      ...data,
+      sets: data.sets.map((s) => (s.id === setId ? updated : s)),
+    });
+
+    return updated;
+  }
+
+  async deleteSet(setId: string): Promise<void> {
+    const data = this.readFromStorage();
+    this.persistAndBroadcast({
+      ...data,
+      sets: data.sets.filter((s) => s.id !== setId),
+    });
+  }
+
+  async addLifter(input: { name: string; avatarColor: string }): Promise<Lifter> {
+    const trimmed = input.name.trim();
+    if (!trimmed) {
+      throw new Error('Enter a name for the new user.');
+    }
+    const data = this.readFromStorage();
+    if (data.lifters.some((l) => l.name.toLowerCase() === trimmed.toLowerCase())) {
+      throw new Error(`A user named "${trimmed}" already exists.`);
+    }
+
+    const created: Lifter = {
+      id: generateId('lifter'),
+      name: trimmed,
+      avatarColor: input.avatarColor || '#10b981',
+      isAdmin: false,
+      createdAt: new Date().toISOString(),
+    };
+
+    this.persistAndBroadcast({
+      ...data,
+      lifters: [...data.lifters, created],
+    });
+
+    return created;
+  }
+
+  async deleteLifter(targetLifterId: string, actingLifterId: string): Promise<void> {
+    const data = this.readFromStorage();
+    const actor = data.lifters.find((l) => l.id === actingLifterId);
+    if (!actor?.isAdmin) {
+      throw new Error('Only Joel (admin) can delete users.');
+    }
+    if (targetLifterId === actingLifterId) {
+      throw new Error('Joel cannot delete his own admin account.');
+    }
+    const target = data.lifters.find((l) => l.id === targetLifterId);
+    if (!target) {
+      throw new Error('User not found.');
+    }
+    if (target.isAdmin) {
+      throw new Error('Cannot delete an admin user.');
+    }
+
+    const updatedSessions = data.sessions
+      .map((s) => {
+        const remaining = s.participantIds.filter((id) => id !== targetLifterId);
+        return {
+          ...s,
+          createdBy: s.createdBy === targetLifterId ? null : s.createdBy,
+          participantIds: remaining,
+          status: remaining.length === 0 ? ('completed' as const) : s.status,
+          endedAt:
+            remaining.length === 0 && !s.endedAt ? new Date().toISOString() : s.endedAt,
+        };
+      })
+      .filter((s) => s.participantIds.length > 0 || data.sets.some((set) => set.sessionId === s.id && set.lifterId !== targetLifterId));
+
+    const updatedSets = data.sets
+      .filter((s) => s.lifterId !== targetLifterId)
+      .map((s) => (s.loggedBy === targetLifterId ? { ...s, loggedBy: null } : s));
+
+    this.persistAndBroadcast({
+      ...data,
+      lifters: data.lifters.filter((l) => l.id !== targetLifterId),
+      sessions: updatedSessions,
+      sets: updatedSets,
+    });
+  }
+
+  async addExercise(input: { name: string; category: ExerciseCategory }): Promise<Exercise> {
+    const trimmed = input.name.trim();
+    if (!trimmed) {
+      throw new Error('Enter an exercise name.');
+    }
+    const data = this.readFromStorage();
+    if (data.exercises.some((e) => e.name.toLowerCase() === trimmed.toLowerCase())) {
+      throw new Error(`"${trimmed}" already exists.`);
+    }
+
+    const maxSort = data.exercises.reduce((max, e) => Math.max(max, e.sortOrder), 0);
+    const created: Exercise = {
+      id: generateId('ex'),
+      name: trimmed,
+      category: input.category,
+      isBuiltin: false,
+      sortOrder: maxSort + 1,
+      createdAt: new Date().toISOString(),
+    };
+
+    this.persistAndBroadcast({
+      ...data,
+      exercises: [...data.exercises, created],
+    });
+
+    return created;
+  }
+
+  async deleteExercise(targetExerciseId: string, actingLifterId: string): Promise<void> {
+    const data = this.readFromStorage();
+    const actor = data.lifters.find((l) => l.id === actingLifterId);
+    if (!actor?.isAdmin) {
+      throw new Error('Only Joel (admin) can remove exercises.');
+    }
+    if (!data.exercises.some((e) => e.id === targetExerciseId)) {
+      throw new Error('Exercise not found.');
+    }
+
+    this.persistAndBroadcast({
+      ...data,
+      exercises: data.exercises.filter((e) => e.id !== targetExerciseId),
+      sets: data.sets.filter((s) => s.exerciseId !== targetExerciseId),
+    });
+  }
+
+  async verifyAdminPin(pin: string): Promise<boolean> {
+    return verifyAdminPinHash(pin);
+  }
+
+  dispose(): void {
+    if (this.channel) {
+      this.channel.close();
+      this.channel = null;
+    }
+    if (typeof window !== 'undefined' && this.storageHandler) {
+      window.removeEventListener('storage', this.storageHandler);
+      this.storageHandler = null;
+    }
+    this.listeners.clear();
+  }
+}

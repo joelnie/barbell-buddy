@@ -1,0 +1,231 @@
+@import "tailwindcss";
+
+:root,
+html[data-theme="dark"] {
+  --bg-app: #090d16;
+  --bg-surface: #111827;
+  --bg-elevated: #1b2436;
+  --bg-input: #0d1321;
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --border-subtle: rgba(148, 163, 184, 0.2);
+  --danger: #f43f5e;
+  --danger-soft: rgba(244, 63, 94, 0.14);
+
+  /* Default Secondary Accent (Neon Green) in Dark Theme */
+  --accent: #39ff14;
+  --accent-text: #4ade80;
+  --accent-border: rgba(57, 255, 20, 0.55);
+  --accent-soft: rgba(57, 255, 20, 0.13);
+  --accent-glow: 0 0 0 1px rgba(57, 255, 20, 0.16), 0 8px 24px -10px rgba(57, 255, 20, 0.22);
+  --accent-on-fill: #052e16;
+}
+
+html[data-theme="light"] {
+  --bg-app: #f4f7fb;
+  --bg-surface: #ffffff;
+  --bg-elevated: #eef2f8;
+  --bg-input: #f8fafc;
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --border-subtle: rgba(15, 23, 42, 0.12);
+  --danger: #e11d48;
+  --danger-soft: rgba(225, 29, 72, 0.1);
+
+  /* Default Secondary Accent (Neon Green) in Light Theme */
+  --accent: #16a34a;
+  --accent-text: #15803d;
+  --accent-border: #22c55e;
+  --accent-soft: rgba(34, 197, 94, 0.13);
+  --accent-glow: 0 2px 14px -4px rgba(34, 197, 94, 0.22);
+  --accent-on-fill: #ffffff;
+}
+
+/* Secondary App Color overrides for Dark Theme */
+html[data-theme="dark"][data-accent="neon-green"] {
+  --accent: #39ff14;
+  --accent-text: #4ade80;
+  --accent-border: rgba(57, 255, 20, 0.55);
+  --accent-soft: rgba(57, 255, 20, 0.13);
+  --accent-glow: 0 0 0 1px rgba(57, 255, 20, 0.16), 0 8px 24px -10px rgba(57, 255, 20, 0.22);
+  --accent-on-fill: #052e16;
+}
+
+html[data-theme="dark"][data-accent="turquoise"] {
+  --accent: #2dd4bf;
+  --accent-text: #5eead4;
+  --accent-border: rgba(45, 212, 191, 0.6);
+  --accent-soft: rgba(45, 212, 191, 0.14);
+  --accent-glow: 0 0 0 1px rgba(45, 212, 191, 0.18), 0 8px 24px -10px rgba(45, 212, 191, 0.24);
+  --accent-on-fill: #042f2e;
+}
+
+html[data-theme="dark"][data-accent="bright-orange"] {
+  --accent: #ff6b00;
+  --accent-text: #fb923c;
+  --accent-border: rgba(255, 107, 0, 0.65);
+  --accent-soft: rgba(255, 107, 0, 0.15);
+  --accent-glow: 0 0 0 1px rgba(255, 107, 0, 0.18), 0 8px 24px -10px rgba(255, 107, 0, 0.25);
+  --accent-on-fill: #ffffff;
+}
+
+html[data-theme="dark"][data-accent="electric-blue"] {
+  --accent: #38bdf8;
+  --accent-text: #7dd3fc;
+  --accent-border: rgba(56, 189, 248, 0.6);
+  --accent-soft: rgba(56, 189, 248, 0.14);
+  --accent-glow: 0 0 0 1px rgba(56, 189, 248, 0.18), 0 8px 24px -10px rgba(56, 189, 248, 0.24);
+  --accent-on-fill: #082f49;
+}
+
+html[data-theme="dark"][data-accent="vivid-purple"] {
+  --accent: #c084fc;
+  --accent-text: #d8b4fe;
+  --accent-border: rgba(192, 132, 252, 0.6);
+  --accent-soft: rgba(192, 132, 252, 0.15);
+  --accent-glow: 0 0 0 1px rgba(192, 132, 252, 0.18), 0 8px 24px -10px rgba(192, 132, 252, 0.24);
+  --accent-on-fill: #2e1065;
+}
+
+/* Secondary App Color overrides for Light Theme */
+html[data-theme="light"][data-accent="neon-green"] {
+  --accent: #16a34a;
+  --accent-text: #15803d;
+  --accent-border: #22c55e;
+  --accent-soft: rgba(34, 197, 94, 0.13);
+  --accent-glow: 0 4px 16px -6px rgba(34, 197, 94, 0.28);
+  --accent-on-fill: #ffffff;
+}
+
+html[data-theme="light"][data-accent="turquoise"] {
+  --accent: #0d9488;
+  --accent-text: #0f766e;
+  --accent-border: #14b8a6;
+  --accent-soft: rgba(20, 184, 166, 0.13);
+  --accent-glow: 0 4px 16px -6px rgba(20, 184, 166, 0.28);
+  --accent-on-fill: #ffffff;
+}
+
+html[data-theme="light"][data-accent="bright-orange"] {
+  --accent: #ea580c;
+  --accent-text: #c2410c;
+  --accent-border: #ff6b00;
+  --accent-soft: rgba(255, 107, 0, 0.12);
+  --accent-glow: 0 4px 16px -6px rgba(255, 107, 0, 0.28);
+  --accent-on-fill: #ffffff;
+}
+
+html[data-theme="light"][data-accent="electric-blue"] {
+  --accent: #2563eb;
+  --accent-text: #1d4ed8;
+  --accent-border: #3b82f6;
+  --accent-soft: rgba(59, 130, 246, 0.12);
+  --accent-glow: 0 4px 16px -6px rgba(59, 130, 246, 0.28);
+  --accent-on-fill: #ffffff;
+}
+
+html[data-theme="light"][data-accent="vivid-purple"] {
+  --accent: #9333ea;
+  --accent-text: #7e22ce;
+  --accent-border: #a855f7;
+  --accent-soft: rgba(168, 85, 247, 0.12);
+  --accent-glow: 0 4px 16px -6px rgba(168, 85, 247, 0.28);
+  --accent-on-fill: #ffffff;
+}
+
+/* Pink / Light Pink Theme */
+html[data-theme="pink"] {
+  --bg-app: #fff1f5;
+  --bg-surface: #ffffff;
+  --bg-elevated: #ffe4ec;
+  --bg-input: #fff7f9;
+  --text-primary: #4c0519;
+  --text-secondary: #881337;
+  --text-muted: #be123c;
+  --border-subtle: rgba(244, 63, 94, 0.2);
+  --danger: #e11d48;
+  --danger-soft: rgba(225, 29, 72, 0.12);
+
+  --accent: #ec4899;
+  --accent-text: #db2777;
+  --accent-border: #f472b6;
+  --accent-soft: rgba(236, 72, 153, 0.14);
+  --accent-glow: 0 4px 18px -6px rgba(236, 72, 153, 0.3);
+  --accent-on-fill: #ffffff;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background-color: var(--bg-app);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", Roboto,
+    sans-serif;
+  overscroll-behavior-y: none;
+}
+
+.bb-widget {
+  background-color: var(--bg-surface);
+  border: 1.5px solid var(--accent-border);
+  box-shadow: var(--accent-glow);
+  border-radius: 1rem;
+}
+
+.bb-subcard {
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.75rem;
+}
+
+.bb-input {
+  background-color: var(--bg-input);
+  color: var(--text-primary);
+  border: 1.5px solid var(--border-subtle);
+  border-radius: 0.75rem;
+  transition: border-color 150ms ease;
+}
+
+.bb-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.bb-btn-primary {
+  background-color: var(--accent);
+  color: var(--accent-on-fill);
+  font-weight: 700;
+  border-radius: 0.875rem;
+  transition: transform 100ms ease, opacity 150ms ease;
+}
+
+.bb-btn-primary:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.bb-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.bb-pill-active {
+  background-color: var(--accent-soft);
+  border: 1.5px solid var(--accent);
+  color: var(--accent-text);
+}
+
+.bb-pill-idle {
+  background-color: var(--bg-elevated);
+  border: 1.5px solid var(--border-subtle);
+  color: var(--text-secondary);
+}
+
+.bb-safe-bottom {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
