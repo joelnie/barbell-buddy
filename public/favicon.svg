@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <rect width="512" height="512" rx="112" fill="#090d16"/>
+  <rect x="24" y="24" width="464" height="464" rx="92" stroke="#22c55e" stroke-width="12" stroke-opacity="0.7"/>
+  <!-- Barbell shaft -->
+  <rect x="148" y="240" width="216" height="32" rx="16" fill="#e2e8f0"/>
+  <!-- Left inner plate -->
+  <rect x="108" y="156" width="40" height="200" rx="16" fill="#22c55e"/>
+  <!-- Left outer plate -->
+  <rect x="64" y="188" width="36" height="136" rx="14" fill="#16a34a"/>
+  <!-- Right inner plate -->
+  <rect x="364" y="156" width="40" height="200" rx="16" fill="#22c55e"/>
+  <!-- Right outer plate -->
+  <rect x="412" y="188" width="36" height="136" rx="14" fill="#16a34a"/>
+</svg>
