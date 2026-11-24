@@ -1,11 +1,10 @@
-import { useMemo, useRef, useState, type PointerEvent } from 'react';
+import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import { Minus, Plus } from 'lucide-react';
 import type { SliderStop } from '../lib/sliderOptions';
 
 export interface VerticalDiscreteSliderProps {
   id: string;
   label: string;
-  badgeText?: string;
   stops: readonly SliderStop[];
   selectedIndex: number;
   onSelectIndex: (index: number) => void;
@@ -14,45 +13,37 @@ export interface VerticalDiscreteSliderProps {
   trackTestId?: string;
 }
 
-const THUMB_PAD_PX = 16;
+const ROW_HEIGHT_PX = 40;
+const VISIBLE_SLOTS = 5;
+const WHEEL_HEIGHT_PX = ROW_HEIGHT_PX * VISIBLE_SLOTS; // 200px (offsets +2, +1, 0, -1, -2)
 
-function computeLandmarkIndices(stops: readonly SliderStop[]): number[] {
-  const maxIndex = stops.length - 1;
-  if (maxIndex <= 0) return [0];
-
-  const hasPullupModes =
-    stops[0]?.rawValue === 'Assisted' && stops[1]?.rawValue === 'Bodyweight';
-
-  const isOneToThirtyReps =
-    stops.length === 30 && stops[0]?.rawValue === 1 && stops[29]?.rawValue === 30;
-
-  const rawCandidates = hasPullupModes
-    ? [maxIndex, 7, 1, 0]
-    : isOneToThirtyReps
-      ? [29, 19, 9, 0]
-      : [
-          maxIndex,
-          Math.round(maxIndex * 0.67),
-          Math.round(maxIndex * 0.33),
-          0,
-        ];
-
-  const seen = new Set<number>();
-  const unique: number[] = [];
-  for (const idx of rawCandidates) {
-    const clamped = Math.max(0, Math.min(maxIndex, idx));
-    if (!seen.has(clamped)) {
-      seen.add(clamped);
-      unique.push(clamped);
-    }
+function computeSlotOpacity(absOffset: number): number {
+  if (absOffset >= 2.5) return 0;
+  if (absOffset <= 1) {
+    // 0 -> 1.0 (selected middle), 1 -> 0.5 (next/prev shadier)
+    return Math.round((1 - 0.5 * absOffset) * 1000) / 1000;
   }
-  return unique.sort((a, b) => b - a);
+  if (absOffset <= 2) {
+    // 1 -> 0.5, 2 -> 0.18 (second next/prev barely visible)
+    return Math.round((0.5 - 0.32 * (absOffset - 1)) * 1000) / 1000;
+  }
+  // 2 -> 0.18, 2.5 -> 0 (third ones not visible)
+  return Math.round(0.18 * (1 - (absOffset - 2) / 0.5) * 1000) / 1000;
+}
+
+function computeSlotScale(absOffset: number): number {
+  if (absOffset <= 1) {
+    return 1 - 0.1 * absOffset;
+  }
+  if (absOffset <= 2) {
+    return 0.9 - 0.1 * (absOffset - 1);
+  }
+  return 0.8;
 }
 
 export function VerticalDiscreteSlider({
   id,
   label,
-  badgeText,
   stops,
   selectedIndex,
   onSelectIndex,
@@ -65,62 +56,156 @@ export function VerticalDiscreteSlider({
   const clampedIndex = Math.max(0, Math.min(maxIndex, safeSelected));
   const currentStop = stops[clampedIndex] ?? stops[0];
 
-  const railRef = useRef<HTMLDivElement | null>(null);
+  const wheelRef = useRef<HTMLDivElement | null>(null);
+  const clampedIndexRef = useRef<number>(clampedIndex);
+  clampedIndexRef.current = clampedIndex;
+  const maxIndexRef = useRef<number>(maxIndex);
+  maxIndexRef.current = maxIndex;
+  const onSelectRef = useRef(onSelectIndex);
+  onSelectRef.current = onSelectIndex;
+
+  // Drag & flick tracking
   const activePointerId = useRef<number | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
+  const dragStartY = useRef<number>(0);
+  const dragStartIndex = useRef<number>(0);
+  const maxMovementPx = useRef<number>(0);
+  const velocitySamples = useRef<{ y: number; t: number }[]>([]);
+  const wheelDeltaAccum = useRef<number>(0);
 
-  const ratio = maxIndex === 0 ? 1 : clampedIndex / maxIndex;
+  const [dragVirtualIndex, setDragVirtualIndex] = useState<number | null>(null);
+  const isDragging = dragVirtualIndex !== null;
+  const virtualIndex = dragVirtualIndex ?? clampedIndex;
 
-  const landmarkIndices = useMemo(() => computeLandmarkIndices(stops), [stops]);
+  // Native non-passive wheel listener so mouse/trackpad scrolling spins the drum cleanly
+  useEffect(() => {
+    const el = wheelRef.current;
+    if (!el) return;
 
-  const updateFromClientY = (clientY: number) => {
-    if (maxIndex <= 0 || !railRef.current || !Number.isFinite(clientY)) return;
-    const rect = railRef.current.getBoundingClientRect();
-    const height = rect.height > 0 ? rect.height : 208;
-    const usableHeight = Math.max(1, height - THUMB_PAD_PX * 2);
-    const yFromTop = clientY - (rect.top + THUMB_PAD_PX);
-    const nextRatio = Math.max(0, Math.min(1, 1 - yFromTop / usableHeight));
-    const nextIndex = Math.round(nextRatio * maxIndex);
-    onSelectIndex(nextIndex);
-  };
+    const handleWheel = (e: WheelEvent) => {
+      if (maxIndexRef.current <= 0) return;
+      e.preventDefault();
+      wheelDeltaAccum.current += e.deltaY;
+      const stepThreshold = 28;
+      if (Math.abs(wheelDeltaAccum.current) >= stepThreshold) {
+        const steps = Math.trunc(wheelDeltaAccum.current / stepThreshold);
+        wheelDeltaAccum.current -= steps * stepThreshold;
+        // Scrolling wheel up (deltaY < 0) increases value toward +; scrolling down decreases toward -
+        const nextIdx = Math.max(
+          0,
+          Math.min(maxIndexRef.current, clampedIndexRef.current - steps),
+        );
+        if (nextIdx !== clampedIndexRef.current) {
+          onSelectRef.current(nextIdx);
+        }
+      }
+    };
+
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      el.removeEventListener('wheel', handleWheel);
+    };
+  }, []);
 
   const handlePointerDown = (e: PointerEvent<HTMLDivElement>) => {
-    if (maxIndex <= 0) return;
+    if (maxIndex <= 0 || !Number.isFinite(e.clientY)) return;
     e.preventDefault();
     const pid = e.pointerId ?? 0;
     activePointerId.current = pid;
-    setIsDragging(true);
+    dragStartY.current = e.clientY;
+    dragStartIndex.current = clampedIndex;
+    maxMovementPx.current = 0;
+    velocitySamples.current = [{ y: e.clientY, t: performance.now() }];
+    setDragVirtualIndex(clampedIndex);
+
     if (typeof e.currentTarget.setPointerCapture === 'function') {
       try {
         e.currentTarget.setPointerCapture(pid);
       } catch {
-        // Ignore synthetic pointer events without active pointer id
+        // Ignore synthetic pointer events without active browser pointer capture
       }
     }
-    updateFromClientY(e.clientY);
   };
 
   const handlePointerMove = (e: PointerEvent<HTMLDivElement>) => {
     const pid = e.pointerId ?? 0;
-    if (activePointerId.current !== pid) return;
+    if (activePointerId.current !== pid || !Number.isFinite(e.clientY)) return;
     e.preventDefault();
-    updateFromClientY(e.clientY);
+
+    const deltaY = e.clientY - dragStartY.current;
+    maxMovementPx.current = Math.max(maxMovementPx.current, Math.abs(deltaY));
+
+    const now = performance.now();
+    velocitySamples.current.push({ y: e.clientY, t: now });
+    while (velocitySamples.current.length > 6 && now - velocitySamples.current[0].t > 100) {
+      velocitySamples.current.shift();
+    }
+
+    // Dragging downward (deltaY > 0) pulls upper (+1, +2) values down into the middle highlight;
+    // dragging upward (deltaY < 0) pushes lower (-1, -2) values up into the middle highlight.
+    const nextVirtual = Math.max(
+      0,
+      Math.min(maxIndex, dragStartIndex.current + deltaY / ROW_HEIGHT_PX),
+    );
+    setDragVirtualIndex(nextVirtual);
+
+    const snapped = Math.round(nextVirtual);
+    if (snapped !== clampedIndex) {
+      onSelectIndex(snapped);
+    }
   };
 
-  const finishPointerDrag = (e: PointerEvent<HTMLDivElement>) => {
+  const finishPointerInteraction = (e: PointerEvent<HTMLDivElement>) => {
     const pid = e.pointerId ?? 0;
     if (activePointerId.current !== pid) return;
     activePointerId.current = null;
-    setIsDragging(false);
+
+    if (maxMovementPx.current < 5 && wheelRef.current && Number.isFinite(e.clientY)) {
+      // Tap on a visible neighbor slot (+2, +1, -1, -2) selects it directly
+      const rect = wheelRef.current.getBoundingClientRect();
+      const centerY = rect.top + (rect.height > 0 ? rect.height / 2 : WHEEL_HEIGHT_PX / 2);
+      const tappedSlotOffset = Math.round((centerY - e.clientY) / ROW_HEIGHT_PX);
+      if (tappedSlotOffset !== 0 && Math.abs(tappedSlotOffset) <= 2) {
+        const target = Math.max(0, Math.min(maxIndex, dragStartIndex.current + tappedSlotOffset));
+        onSelectIndex(target);
+      }
+      setDragVirtualIndex(null);
+      return;
+    }
+
+    // Compute flick velocity for smooth momentum scrolling across longer ranges
+    const samples = velocitySamples.current;
+    let targetIndex = Math.round(dragVirtualIndex ?? clampedIndex);
+    if (samples.length >= 2) {
+      const first = samples[0];
+      const last = samples[samples.length - 1];
+      const dtMs = last.t - first.t;
+      if (dtMs > 8 && dtMs < 250) {
+        const velocityItemsPerSec = ((last.y - first.y) / ROW_HEIGHT_PX) * (1000 / dtMs);
+        if (Math.abs(velocityItemsPerSec) > 3.5) {
+          targetIndex = Math.max(
+            0,
+            Math.min(maxIndex, Math.round((dragVirtualIndex ?? clampedIndex) + velocityItemsPerSec * 0.2)),
+          );
+        }
+      }
+    }
+
+    onSelectIndex(targetIndex);
+    setDragVirtualIndex(null);
   };
 
-  const isTextStop =
-    currentStop?.rawValue === 'Assisted' || currentStop?.rawValue === 'Bodyweight';
+  // Render only slots strictly within +/-2 of the current wheel position (3rd+ are never visible)
+  const minVisibleIdx = Math.max(0, Math.ceil(virtualIndex - 2.49));
+  const maxVisibleIdx = Math.min(maxIndex, Math.floor(virtualIndex + 2.49));
+  const visibleIndices: number[] = [];
+  for (let i = maxVisibleIdx; i >= minVisibleIdx; i--) {
+    visibleIndices.push(i);
+  }
 
   return (
     <div className="bb-subcard flex flex-col items-center p-3 focus-within:ring-2 focus-within:ring-[var(--accent)]">
-      {/* Header Label */}
-      <div className="mb-2 flex w-full items-center justify-between gap-1">
+      {/* Clean Header Label (info range badges dropped) */}
+      <div className="mb-2 flex w-full items-center justify-center">
         <label
           htmlFor={id}
           className="text-[11px] font-extrabold uppercase tracking-wider"
@@ -128,42 +213,9 @@ export function VerticalDiscreteSlider({
         >
           {label}
         </label>
-        {badgeText && (
-          <span
-            className="rounded-full px-1.5 py-0.5 text-[10px] font-bold"
-            style={{ backgroundColor: 'var(--accent-soft)', color: 'var(--accent-text)' }}
-          >
-            {badgeText}
-          </span>
-        )}
       </div>
 
-      {/* Prominent Live Value Readout */}
-      <div
-        aria-live="polite"
-        className="mb-2.5 flex h-[60px] w-full flex-col items-center justify-center rounded-xl px-2 py-1.5 text-center"
-        style={{
-          backgroundColor: 'var(--bg-surface)',
-          border: '1.5px solid var(--accent-border)',
-        }}
-      >
-        <div
-          className={`leading-tight font-extrabold tabular-nums ${
-            isTextStop ? 'text-base' : 'text-2xl'
-          }`}
-          style={{ color: 'var(--accent-text)' }}
-        >
-          {currentStop?.primaryLabel}
-        </div>
-        <div
-          className="mt-0.5 text-[10px] font-bold uppercase tracking-wide"
-          style={{ color: 'var(--text-muted)' }}
-        >
-          {currentStop?.secondaryLabel}
-        </div>
-      </div>
-
-      {/*Accessible Native Range Slider Input */}
+      {/* Accessible Native Range Slider Input */}
       <input
         id={id}
         type="range"
@@ -196,92 +248,77 @@ export function VerticalDiscreteSlider({
         <Plus className="h-4 w-4" />
       </button>
 
-      {/* Vertical Touch Scrubbing Track (touch-action: none prevents page scroll) */}
+      {/* 5-Slot Scrollable Drum / Wheel (Selected always in middle & highlighted; ±1 shadier; ±2 barely visible; ±3+ hidden) */}
       <div
-        ref={railRef}
+        ref={wheelRef}
         data-testid={trackTestId}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
-        onPointerUp={finishPointerDrag}
-        onPointerCancel={finishPointerDrag}
-        style={{ touchAction: 'none' }}
-        className="bb-slider-track relative my-2 flex h-52 w-full cursor-ns-resize touch-none items-center justify-center select-none"
+        onPointerUp={finishPointerInteraction}
+        onPointerCancel={() => {
+          activePointerId.current = null;
+          setDragVirtualIndex(null);
+        }}
+        style={{ height: `${WHEEL_HEIGHT_PX}px`, touchAction: 'none' }}
+        className="bb-slider-track relative my-2 w-full cursor-ns-resize touch-none overflow-hidden select-none"
       >
-        {/* Inner Rail + Scale Ticks Wrapper */}
-        <div className="relative flex h-full w-full items-center justify-center">
-          {/* Vertical Track Tube */}
-          <div
-            className="relative w-4 overflow-hidden rounded-full"
-            style={{
-              height: `calc(100% - ${THUMB_PAD_PX * 2}px)`,
-              backgroundColor: 'var(--bg-input)',
-              border: '1.5px solid var(--border-subtle)',
-            }}
-          >
-            {/* Active Fill from Bottom to Thumb */}
+        {/* Fixed Middle Selection Highlight Frame */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute right-1 left-1 top-1/2 -translate-y-1/2 rounded-xl"
+          style={{
+            height: `${ROW_HEIGHT_PX + 2}px`,
+            backgroundColor: 'var(--accent-soft)',
+            border: '2px solid var(--accent)',
+            boxShadow: 'var(--accent-glow)',
+          }}
+        />
+
+        {/* Wheel Value Slots */}
+        {visibleIndices.map((idx) => {
+          const stop = stops[idx];
+          if (!stop) return null;
+
+          const offset = idx - virtualIndex;
+          const absOffset = Math.abs(offset);
+          if (absOffset >= 2.5) return null;
+
+          const opacity = computeSlotOpacity(absOffset);
+          const scale = computeSlotScale(absOffset);
+          const yOffsetPx = -offset * ROW_HEIGHT_PX;
+          const discreteOffset = idx - clampedIndex;
+          const isCenterSelected = Math.round(virtualIndex) === idx;
+          const isTextStop =
+            stop.rawValue === 'Assisted' || stop.rawValue === 'Bodyweight';
+
+          return (
             <div
-              className={`absolute right-0 bottom-0 left-0 rounded-b-full ${
-                isDragging ? '' : 'transition-[height] duration-75'
-              }`}
+              key={stop.key}
+              data-wheel-offset={discreteOffset}
+              aria-hidden={!isCenterSelected}
               style={{
-                height: `${ratio * 100}%`,
-                backgroundColor: 'var(--accent)',
-                opacity: 0.85,
+                height: `${ROW_HEIGHT_PX}px`,
+                top: '50%',
+                transform: `translateY(calc(-50% + ${yOffsetPx}px)) scale(${scale})`,
+                opacity,
+                color: isCenterSelected ? 'var(--accent-text)' : 'var(--text-primary)',
               }}
-            />
-          </div>
-
-          {/* Draggable Thumb Handle */}
-          <div
-            className={`pointer-events-none absolute left-1/2 flex h-8 w-12 -translate-x-1/2 flex-col items-center justify-center gap-1 rounded-xl ${
-              isDragging ? 'scale-105' : 'transition-[bottom,transform] duration-75'
-            }`}
-            style={{
-              bottom: `calc(${THUMB_PAD_PX}px + (100% - ${THUMB_PAD_PX * 2}px) * ${ratio} - 16px)`,
-              backgroundColor: 'var(--bg-surface)',
-              border: '2px solid var(--accent)',
-              boxShadow: 'var(--accent-glow)',
-            }}
-          >
-            <span
-              className="h-0.5 w-5 rounded-full"
-              style={{ backgroundColor: 'var(--accent)' }}
-            />
-            <span
-              className="h-0.5 w-5 rounded-full"
-              style={{ backgroundColor: 'var(--accent)' }}
-            />
-          </div>
-
-          {/* Right-Side Landmark Scale Labels */}
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute right-1.5"
-            style={{
-              top: `${THUMB_PAD_PX}px`,
-              bottom: `${THUMB_PAD_PX}px`,
-              width: '2.5rem',
-            }}
-          >
-            {landmarkIndices.map((idx) => {
-              const tickRatio = maxIndex === 0 ? 1 : idx / maxIndex;
-              const isSelected = idx === clampedIndex;
-              return (
-                <span
-                  key={stops[idx]?.key ?? idx}
-                  className="absolute right-0 translate-y-1/2 text-[10px] font-bold tabular-nums"
-                  style={{
-                    bottom: `${tickRatio * 100}%`,
-                    color: isSelected ? 'var(--accent-text)' : 'var(--text-muted)',
-                    opacity: isSelected ? 1 : 0.72,
-                  }}
-                >
-                  {stops[idx]?.tickLabel}
-                </span>
-              );
-            })}
-          </div>
-        </div>
+              className={`pointer-events-none absolute right-2 left-2 flex items-center justify-center text-center tabular-nums ${
+                isDragging ? '' : 'transition-[transform,opacity,color] duration-150 ease-out'
+              } ${
+                isCenterSelected
+                  ? isTextStop
+                    ? 'text-sm font-extrabold'
+                    : 'text-lg font-extrabold'
+                  : isTextStop
+                    ? 'text-xs font-bold'
+                    : 'text-sm font-bold'
+              }`}
+            >
+              <span className="truncate">{stop.primaryLabel}</span>
+            </div>
+          );
+        })}
       </div>
 
       {/* Bottom Single-Notch (−) Button */}

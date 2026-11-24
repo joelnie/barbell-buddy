@@ -4,6 +4,7 @@ import type {
   WorkoutSession,
   WorkoutSet,
 } from '../types/models';
+import { localizeExerciseName } from './finnish';
 
 export interface NormalizedSetFields {
   pullupMode: PullupMode | null;
@@ -93,12 +94,36 @@ export function getLastLoggedSetForLifterExercise(
   sets: WorkoutSet[],
   lifterId: string,
   exerciseId: string,
+  exercises?: Exercise[],
 ): WorkoutSet | undefined {
+  let matchingExerciseIds: Set<string> | null = null;
+  if (exercises && exercises.length > 0) {
+    const target = exercises.find((e) => e.id === exerciseId);
+    if (target) {
+      const targetName = localizeExerciseName(target.name).toLowerCase();
+      matchingExerciseIds = new Set(
+        exercises
+          .filter(
+            (e) =>
+              e.id === exerciseId ||
+              localizeExerciseName(e.name).toLowerCase() === targetName,
+          )
+          .map((e) => e.id),
+      );
+    }
+  }
+
   let latest: WorkoutSet | undefined;
   let latestTime = -Infinity;
   for (const s of sets) {
-    if (s.lifterId !== lifterId || s.exerciseId !== exerciseId) continue;
-    const t = new Date(s.createdAt).getTime();
+    if (s.lifterId !== lifterId) continue;
+    const matchesExercise = matchingExerciseIds
+      ? matchingExerciseIds.has(s.exerciseId)
+      : s.exerciseId === exerciseId;
+    if (!matchesExercise) continue;
+
+    const parsed = Date.parse(s.createdAt);
+    const t = Number.isNaN(parsed) ? 0 : parsed;
     if (t >= latestTime) {
       latestTime = t;
       latest = s;

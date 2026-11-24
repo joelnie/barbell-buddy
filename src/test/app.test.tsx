@@ -300,7 +300,7 @@ describe('Barbell Buddy PWA (Suomi)', () => {
     ).toEqual(['Bodyweight']);
   });
 
-  it('logs Pull-ups (Kuminauha, Kehonpaino, +kg) and weighted lifts via vertical sliders, touch drag, and smart snapping', async () => {
+  it('renders 5-slot scrollable wheel sliders (middle highlighted, ±1 shadier, ±2 barely visible, ±3+ hidden, no range info widgets) and logs sets via drag, wheel, and +/-', async () => {
     const user = userEvent.setup();
     const store = new LocalRealtimeStore({ storageKey: 'test-pullups-sliders' });
     await store.initialize();
@@ -313,17 +313,47 @@ describe('Barbell Buddy PWA (Suomi)', () => {
 
     expect(screen.getByLabelText('Liike')).toHaveValue('ex-pullups');
 
+    // Info range widgets ("1–30", "Kumi–+30") are dropped
+    expect(screen.queryByText('1–30')).not.toBeInTheDocument();
+    expect(screen.queryByText('Kumi–+30')).not.toBeInTheDocument();
+
     const repsSlider = screen.getByRole('slider', { name: 'Toistot' });
     const weightSlider = screen.getByRole('slider', { name: 'Paino' });
+    const repsTrack = screen.getByTestId('reps-slider-track');
+    const weightTrack = screen.getByTestId('weight-slider-track');
 
-    // Default for Leuanveto: Kehonpaino (index 1) and 8 toistoa (index 7)
+    // Default for Leuanveto when user has no history yet: Kehonpaino (index 1) and 8 toistoa (index 7)
     expect(weightSlider).toHaveAttribute('aria-valuetext', 'Kehonpaino');
     expect(repsSlider).toHaveAttribute('aria-valuetext', '8 toistoa');
 
-    // 1. Step down 1 notch on Paino -> Kuminauha (index 0), step up twice on Toistot -> 10 toistoa
+    // Verify 5-slot wheel visibility tiers around 8 toistoa:
+    // offset 0 ("8") => middle highlighted (opacity 1)
+    // offset ±1 ("9", "7") => shadier (opacity 0.5)
+    // offset ±2 ("10", "6") => barely visible (opacity 0.18)
+    // offset ±3 ("11", "5") => not visible / not rendered
+    const slot0 = repsTrack.querySelector('[data-wheel-offset="0"]') as HTMLElement;
+    const slotPlus1 = repsTrack.querySelector('[data-wheel-offset="1"]') as HTMLElement;
+    const slotMinus1 = repsTrack.querySelector('[data-wheel-offset="-1"]') as HTMLElement;
+    const slotPlus2 = repsTrack.querySelector('[data-wheel-offset="2"]') as HTMLElement;
+    const slotMinus2 = repsTrack.querySelector('[data-wheel-offset="-2"]') as HTMLElement;
+    expect(slot0).toHaveTextContent('8');
+    expect(slot0.style.opacity).toBe('1');
+    expect(slotPlus1).toHaveTextContent('9');
+    expect(slotPlus1.style.opacity).toBe('0.5');
+    expect(slotMinus1).toHaveTextContent('7');
+    expect(slotMinus1.style.opacity).toBe('0.5');
+    expect(slotPlus2).toHaveTextContent('10');
+    expect(slotPlus2.style.opacity).toBe('0.18');
+    expect(slotMinus2).toHaveTextContent('6');
+    expect(slotMinus2.style.opacity).toBe('0.18');
+    expect(repsTrack.querySelector('[data-wheel-offset="3"]')).toBeNull();
+    expect(repsTrack.querySelector('[data-wheel-offset="-3"]')).toBeNull();
+
+    // 1. Step down 1 notch on Paino -> Kuminauha (index 0); scroll wheel + button on Toistot -> 10 toistoa
     await user.click(screen.getByRole('button', { name: 'Vähennä painoa' }));
     expect(weightSlider).toHaveAttribute('aria-valuetext', 'Kuminauha');
-    await user.click(screen.getByRole('button', { name: 'Lisää toistoja' }));
+    fireEvent.wheel(repsTrack, { deltaY: -40 });
+    expect(repsSlider).toHaveAttribute('aria-valuetext', '9 toistoa');
     await user.click(screen.getByRole('button', { name: 'Lisää toistoja' }));
     expect(repsSlider).toHaveAttribute('aria-valuetext', '10 toistoa');
 
@@ -337,25 +367,12 @@ describe('Barbell Buddy PWA (Suomi)', () => {
     await user.click(screen.getByRole('button', { name: /Lisää sarja \(Julie\)/i }));
     expect(await screen.findByText(/Kehonpaino × 7 toistoa/i)).toBeInTheDocument();
 
-    // 3. Weighted Pull-ups via vertical pointer scrubbing on the track!
-    const weightTrack = screen.getByTestId('weight-slider-track');
+    // 3. Weighted Pull-ups via vertical touch-drag scrolling on the wheel!
+    // Currently at index 1 (Kehonpaino). Dragging downward by +200px (5 * 40px rows) scrolls to index 6 (+12.5 kg).
     expect(weightTrack).toHaveClass('touch-none', 'bb-slider-track');
-    vi.spyOn(weightTrack, 'getBoundingClientRect').mockReturnValue({
-      top: 100,
-      bottom: 332,
-      left: 0,
-      right: 120,
-      width: 120,
-      height: 232, // usable height = 232 - 32 = 200px
-      x: 0,
-      y: 100,
-      toJSON: () => ({}),
-    });
-
-    // Pull-up stops length = 14 (maxIndex = 13). Index 6 => 12.5 kg (ratio = 6/13)
-    fireEvent.pointerDown(weightTrack, { pointerId: 1, clientY: 280 });
-    fireEvent.pointerMove(weightTrack, { pointerId: 1, clientY: 223.7 });
-    fireEvent.pointerUp(weightTrack, { pointerId: 1, clientY: 223.7 });
+    fireEvent.pointerDown(weightTrack, { pointerId: 1, clientY: 100 });
+    fireEvent.pointerMove(weightTrack, { pointerId: 1, clientY: 300 });
+    fireEvent.pointerUp(weightTrack, { pointerId: 1, clientY: 300 });
 
     expect(weightSlider).toHaveAttribute('aria-valuetext', '+12.5 kg');
     fireEvent.change(repsSlider, { target: { value: '4' } }); // 5 reps
@@ -643,6 +660,87 @@ describe('Barbell Buddy PWA (Suomi)', () => {
     ).toBeInTheDocument();
     expect(screen.getByText('95 kg')).toBeInTheDocument();
     expect(screen.getByText('52.5 kg')).toBeInTheDocument();
+
+    store.dispose();
+  });
+
+  it('defaults sliders in a new session to each user’s last-session reps and weights', async () => {
+    const user = userEvent.setup();
+    const store = new LocalRealtimeStore({ storageKey: 'test-per-user-last-defaults' });
+    await store.initialize();
+
+    // Previous completed session from last week
+    const prev = await store.createSession({
+      createdBy: 'lifter-joel',
+      participantIds: ['lifter-joel', 'lifter-julie'],
+      sessionDate: '2026-11-17',
+      now: new Date(2026, 10, 17, 17, 0, 0),
+    });
+    await store.addSet({
+      sessionId: prev.id,
+      lifterId: 'lifter-joel',
+      exerciseId: 'ex-pullups',
+      pullupMode: 'weighted',
+      weightKg: 17.5,
+      reps: 6,
+      loggedBy: 'lifter-joel',
+    });
+    await store.addSet({
+      sessionId: prev.id,
+      lifterId: 'lifter-julie',
+      exerciseId: 'ex-pullups',
+      pullupMode: 'assisted',
+      weightKg: null,
+      reps: 11,
+      loggedBy: 'lifter-joel',
+    });
+    await store.addSet({
+      sessionId: prev.id,
+      lifterId: 'lifter-joel',
+      exerciseId: 'ex-bench-press',
+      weightKg: 97.5,
+      reps: 4,
+      loggedBy: 'lifter-joel',
+    });
+    await store.addSet({
+      sessionId: prev.id,
+      lifterId: 'lifter-julie',
+      exerciseId: 'ex-bench-press',
+      weightKg: 52.5,
+      reps: 9,
+      loggedBy: 'lifter-julie',
+    });
+    await store.endSession(prev.id, new Date(2026, 10, 17, 18, 0, 0));
+
+    // Start a brand-new session today with Joel + Julie
+    localStorage.setItem('defaults-user', 'lifter-joel');
+    render(<App store={store} mainUserStorageKey="defaults-user" />);
+
+    await user.click(await screen.findByRole('button', { name: /Uusi treeni/i }));
+    await user.click(screen.getByRole('button', { name: /Julie/i }));
+    await user.click(screen.getByRole('button', { name: /Aloita treeni \(2\)/i }));
+
+    const repsSlider = screen.getByRole('slider', { name: 'Toistot' });
+    const weightSlider = screen.getByRole('slider', { name: 'Paino' });
+
+    // Immediately defaults to Joel's last Leuanveto (+17.5 kg x 6)
+    expect(weightSlider).toHaveAttribute('aria-valuetext', '+17.5 kg');
+    expect(repsSlider).toHaveAttribute('aria-valuetext', '6 toistoa');
+
+    // Switch lifter to Julie -> immediately defaults to Julie's last Leuanveto (Kuminauha x 11)
+    await user.click(screen.getByRole('button', { name: 'Julie' }));
+    expect(weightSlider).toHaveAttribute('aria-valuetext', 'Kuminauha');
+    expect(repsSlider).toHaveAttribute('aria-valuetext', '11 toistoa');
+
+    // Switch exercise to Penkkipunnerrus -> defaults to Julie's last Penkkipunnerrus (52.5 kg x 9)
+    await user.selectOptions(screen.getByLabelText('Liike'), 'ex-bench-press');
+    expect(weightSlider).toHaveAttribute('aria-valuetext', '52.5 kg');
+    expect(repsSlider).toHaveAttribute('aria-valuetext', '9 toistoa');
+
+    // Switch lifter back to Joel -> defaults to Joel's last Penkkipunnerrus (97.5 kg x 4)
+    await user.click(screen.getByRole('button', { name: 'Joel' }));
+    expect(weightSlider).toHaveAttribute('aria-valuetext', '97.5 kg');
+    expect(repsSlider).toHaveAttribute('aria-valuetext', '4 toistoa');
 
     store.dispose();
   });

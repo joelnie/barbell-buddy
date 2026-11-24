@@ -128,8 +128,8 @@ export function getWeightSliderStopsForExercise(exercise: Exercise): SliderStop[
       return {
         key: `plus-${formatted}`,
         rawValue: opt,
-        primaryLabel: `+${formatted}`,
-        secondaryLabel: 'kg lisäpaino',
+        primaryLabel: `+${formatted} kg`,
+        secondaryLabel: 'lisäpaino',
         tickLabel: `+${formatted}`,
         ariaValueText: `+${formatted} kg`,
       };
@@ -139,8 +139,8 @@ export function getWeightSliderStopsForExercise(exercise: Exercise): SliderStop[
       return {
         key: `db-${formatted}`,
         rawValue: opt,
-        primaryLabel: formatted,
-        secondaryLabel: 'kg / kp',
+        primaryLabel: `${formatted} kg`,
+        secondaryLabel: 'per kp',
         tickLabel: `${formatted}`,
         ariaValueText: `${formatted} kg per käsipaino`,
       };
@@ -149,8 +149,8 @@ export function getWeightSliderStopsForExercise(exercise: Exercise): SliderStop[
     return {
       key: `kg-${formatted}`,
       rawValue: opt,
-      primaryLabel: formatted,
-      secondaryLabel: 'kg',
+      primaryLabel: `${formatted} kg`,
+      secondaryLabel: 'paino',
       tickLabel: `${formatted}`,
       ariaValueText: `${formatted} kg`,
     };

@@ -124,18 +124,36 @@ export function SessionTab() {
     [selectedExercise],
   );
 
-  // Pre-fill smartly by snapping to the lifter's most recent set for the chosen exercise
-  useEffect(() => {
-    if (!selectedLifterId || !selectedExercise) return;
-    const stopsForExercise = getWeightSliderStopsForExercise(selectedExercise);
-    const lastSet = getLastLoggedSetForLifterExercise(
+  const lastSetForSelection = useMemo(() => {
+    const targetLifterId = selectedLifterId || mainUser?.id || '';
+    if (!targetLifterId || !selectedExercise) return undefined;
+    return getLastLoggedSetForLifterExercise(
       snapshot.sets,
-      selectedLifterId,
+      targetLifterId,
       selectedExercise.id,
+      snapshot.exercises,
     );
-    setRepsIndex(resolveInitialRepsIndex(selectedExercise, lastSet));
-    setWeightIndex(resolveInitialWeightIndex(selectedExercise, stopsForExercise, lastSet));
-  }, [selectedLifterId, selectedExercise?.id]);
+  }, [snapshot.sets, snapshot.exercises, selectedLifterId, mainUser?.id, selectedExercise]);
+
+  // Default values for each user & exercise always start at the reps and weights they did last time
+  useEffect(() => {
+    const targetLifterId = selectedLifterId || mainUser?.id || '';
+    if (!targetLifterId || !selectedExercise) return;
+    const stopsForExercise = getWeightSliderStopsForExercise(selectedExercise);
+    setRepsIndex(resolveInitialRepsIndex(selectedExercise, lastSetForSelection));
+    setWeightIndex(
+      resolveInitialWeightIndex(selectedExercise, stopsForExercise, lastSetForSelection),
+    );
+  }, [
+    activeSessionForMainUser?.id,
+    selectedLifterId,
+    mainUser?.id,
+    selectedExercise?.id,
+    lastSetForSelection?.id,
+    lastSetForSelection?.reps,
+    lastSetForSelection?.weightKg,
+    lastSetForSelection?.pullupMode,
+  ]);
 
   const openNewSessionFlow = () => {
     if (!mainUser) return;
@@ -450,16 +468,6 @@ export function SessionTab() {
     group.sets.push(s);
   }
 
-  const weightBadgeText = (() => {
-    if (!selectedExercise || weightStops.length === 0) return undefined;
-    if (selectedExercise.category === 'pullup') return 'Kumi–+30';
-    if (selectedExercise.category === 'dumbbell') return 'per kp';
-    if (selectedExercise.category === 'bodyweight') return 'KP';
-    const first = weightStops[0]?.tickLabel;
-    const last = weightStops[weightStops.length - 1]?.tickLabel;
-    return first && last ? `${first}–${last}` : undefined;
-  })();
-
   return (
     <div className="space-y-4">
       {/* Active Session Banner */}
@@ -679,12 +687,11 @@ export function SessionTab() {
             </div>
           )}
 
-          {/* Side-by-Side Vertical Sliders: Left = Reps (1-30), Right = Exercise Weight */}
+          {/* Side-by-Side Scrollable Vertical Wheel Sliders: Left = Reps, Right = Weight */}
           <div className="grid grid-cols-2 gap-3" role="group" aria-label="Toistojen ja painon säätimet">
             <VerticalDiscreteSlider
               id="set-reps-slider"
               label="Toistot"
-              badgeText="1–30"
               stops={repsStops}
               selectedIndex={repsIndex}
               onSelectIndex={setRepsIndex}
@@ -696,7 +703,6 @@ export function SessionTab() {
             <VerticalDiscreteSlider
               id="set-weight-slider"
               label="Paino"
-              badgeText={weightBadgeText}
               stops={weightStops}
               selectedIndex={weightIndex}
               onSelectIndex={setWeightIndex}
