@@ -15,6 +15,10 @@ import {
 import { useApp } from '../context/AppContext';
 import { formatLocalDate, isSessionActiveAt } from '../lib/dates';
 import {
+  formatHeroPhrase,
+  pickRandomHeroPhraseTemplate,
+} from '../lib/finnish';
+import {
   formatSetLoad,
   formatWeightNumber,
   getLastLoggedSetForLifterExercise,
@@ -39,6 +43,7 @@ export function SessionTab() {
   const [showNewSessionPicker, setShowNewSessionPicker] = useState(false);
   const [selectedParticipantIds, setSelectedParticipantIds] = useState<string[]>([]);
   const [sessionError, setSessionError] = useState<string | null>(null);
+  const [heroTemplate, setHeroTemplate] = useState<string>(() => pickRandomHeroPhraseTemplate());
 
   // Active session logging state (vertical discrete slider indices)
   const [selectedLifterId, setSelectedLifterId] = useState<string>('');
@@ -84,6 +89,13 @@ export function SessionTab() {
       setSelectedExerciseId(snapshot.exercises[0].id);
     }
   }, [snapshot.exercises, selectedExerciseId]);
+
+  // Rotate variating Finnish hero phrase when switching main user or returning to idle view
+  useEffect(() => {
+    if (!activeSessionForMainUser && mainUser?.id) {
+      setHeroTemplate((prev) => pickRandomHeroPhraseTemplate(prev));
+    }
+  }, [mainUser?.id, activeSessionForMainUser?.id]);
 
   // Keep selectedLifterId synced to participants of active session
   useEffect(() => {
@@ -148,7 +160,7 @@ export function SessionTab() {
       });
       setShowNewSessionPicker(false);
     } catch (err) {
-      setSessionError(err instanceof Error ? err.message : 'Could not start session.');
+      setSessionError(err instanceof Error ? err.message : 'Treenin aloitus epäonnistui.');
     }
   };
 
@@ -158,7 +170,7 @@ export function SessionTab() {
     try {
       await store.endSession(activeSessionForMainUser.id);
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : 'Could not end session.');
+      setFormError(err instanceof Error ? err.message : 'Treenin lopetus epäonnistui.');
     }
   };
 
@@ -187,7 +199,7 @@ export function SessionTab() {
         loggedBy: mainUser?.id ?? selectedLifterId,
       });
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : 'Failed to log set.');
+      setFormError(err instanceof Error ? err.message : 'Sarjan kirjaaminen epäonnistui.');
     }
   };
 
@@ -203,7 +215,7 @@ export function SessionTab() {
       setNewExerciseName('');
       setShowQuickAddExercise(false);
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : 'Could not add exercise.');
+      setFormError(err instanceof Error ? err.message : 'Liikkeen lisääminen epäonnistui.');
     }
   };
 
@@ -228,7 +240,7 @@ export function SessionTab() {
       });
       setEditingSetId(null);
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : 'Could not update set.');
+      setFormError(err instanceof Error ? err.message : 'Sarjan päivitys epäonnistui.');
     }
   };
 
@@ -268,12 +280,15 @@ export function SessionTab() {
                 <Sparkles className="h-3.5 w-3.5" />
                 {todayStr}
               </span>
-              <h2 className="mt-2.5 text-xl font-extrabold">
-                Ready to lift, {mainUser.name}?
+              <h2
+                data-testid="idle-hero-greeting"
+                className="mt-2.5 text-xl font-extrabold"
+              >
+                {formatHeroPhrase(heroTemplate, mainUser.name)}
               </h2>
               <p className="mt-1 text-sm" style={{ color: 'var(--text-secondary)' }}>
-                Start a session solo or pick your gym partners for today. Only selected lifters
-                will see and log into your live session.
+                Aloita treeni yksin tai valitse päivän treenikaverit. Vain valitut treenaajat
+                näkevät käynnissä olevan treenin ja voivat kirjata siihen sarjoja.
               </p>
             </div>
           </div>
@@ -286,7 +301,7 @@ export function SessionTab() {
                 className="bb-btn-primary flex w-full items-center justify-center gap-2 py-3.5 text-base shadow-sm"
               >
                 <Plus className="h-5 w-5" />
-                <span>New Session</span>
+                <span>Uusi treeni</span>
               </button>
 
               <div
@@ -295,11 +310,11 @@ export function SessionTab() {
               >
                 <span className="flex items-center gap-1">
                   <Clock className="h-3.5 w-3.5" />
-                  Auto-saves at 23:59 if not ended manually
+                  Tallentuu automaattisesti klo 23.59, jos treeniä ei lopeteta
                 </span>
                 {todaysCompletedCount > 0 && (
                   <span>
-                    {todaysCompletedCount} finished today
+                    {todaysCompletedCount} valmista tänään
                   </span>
                 )}
               </div>
@@ -309,16 +324,16 @@ export function SessionTab() {
               <div className="mb-3 flex items-center justify-between">
                 <div>
                   <h3 className="text-sm font-extrabold">
-                    Select Lifters for {todayStr}
+                    Valitse treenaajat ({todayStr})
                   </h3>
                   <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                    Everyone selected can see and log sets in real time.
+                    Kaikki valitut näkevät treenin ja voivat kirjata sarjoja reaaliajassa.
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setShowNewSessionPicker(false)}
-                  aria-label="Close new session picker"
+                  aria-label="Sulje uuden treenin valinta"
                   className="rounded-lg p-1"
                   style={{ color: 'var(--text-muted)' }}
                 >
@@ -352,11 +367,11 @@ export function SessionTab() {
                         <div>
                           <span className="text-sm font-bold">{lifter.name}</span>
                           {lifter.id === mainUser.id && (
-                            <span className="ml-1.5 text-[11px] opacity-80">(You)</span>
+                            <span className="ml-1.5 text-[11px] opacity-80">(Sinä)</span>
                           )}
                           {isBusy && (
                             <div className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-                              In another active session
+                              Toisessa käynnissä olevassa treenissä
                             </div>
                           )}
                         </div>
@@ -393,7 +408,7 @@ export function SessionTab() {
                   onClick={() => setShowNewSessionPicker(false)}
                   className="bb-pill-idle flex-1 rounded-xl py-2.5 text-sm font-semibold"
                 >
-                  Cancel
+                  Peruuta
                 </button>
                 <button
                   type="button"
@@ -401,7 +416,7 @@ export function SessionTab() {
                   onClick={handleStartSession}
                   className="bb-btn-primary flex-[2] py-2.5 text-sm"
                 >
-                  Start Session ({selectedParticipantIds.length})
+                  Aloita treeni ({selectedParticipantIds.length})
                 </button>
               </div>
             </div>
@@ -437,9 +452,9 @@ export function SessionTab() {
 
   const weightBadgeText = (() => {
     if (!selectedExercise || weightStops.length === 0) return undefined;
-    if (selectedExercise.category === 'pullup') return 'Asst–+30';
-    if (selectedExercise.category === 'dumbbell') return 'per DB';
-    if (selectedExercise.category === 'bodyweight') return 'BW';
+    if (selectedExercise.category === 'pullup') return 'Kumi–+30';
+    if (selectedExercise.category === 'dumbbell') return 'per kp';
+    if (selectedExercise.category === 'bodyweight') return 'KP';
     const first = weightStops[0]?.tickLabel;
     const last = weightStops[weightStops.length - 1]?.tickLabel;
     return first && last ? `${first}–${last}` : undefined;
@@ -457,14 +472,16 @@ export function SessionTab() {
                 style={{ backgroundColor: 'var(--accent)' }}
               />
               <h2 className="text-lg font-extrabold tracking-tight">
-                Session {activeSessionForMainUser.sessionDate}
+                Treeni {activeSessionForMainUser.sessionDate}
               </h2>
             </div>
             <p className="mt-0.5 flex items-center gap-1 text-[11px]" style={{ color: 'var(--text-muted)' }}>
               <Clock className="h-3 w-3" />
-              <span>Auto-saves at 23:59</span>
+              <span>Tallentuu autom. klo 23.59</span>
               <span>·</span>
-              <span>{sessionSets.length} sets logged</span>
+              <span>
+                {sessionSets.length} {sessionSets.length === 1 ? 'sarja kirjattu' : 'sarjaa kirjattu'}
+              </span>
             </p>
           </div>
 
@@ -479,7 +496,7 @@ export function SessionTab() {
             }}
           >
             <CheckCircle2 className="h-4 w-4" />
-            <span>End Session</span>
+            <span>Lopeta treeni</span>
           </button>
         </div>
 
@@ -487,7 +504,7 @@ export function SessionTab() {
         <div className="mt-3 flex flex-wrap items-center gap-1.5">
           <span className="mr-1 flex items-center gap-1 text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>
             <Users className="h-3.5 w-3.5" />
-            Crew:
+            Mukana:
           </span>
           {sessionParticipants.map((p) => (
             <span
@@ -517,7 +534,7 @@ export function SessionTab() {
               }}
             >
               <UserPlus className="h-3 w-3" />
-              <span>Add Lifter</span>
+              <span>Lisää treenaaja</span>
             </button>
           )}
         </div>
@@ -525,7 +542,7 @@ export function SessionTab() {
         {showAddParticipant && availableLateJoiners.length > 0 && (
           <div className="bb-subcard mt-3 flex flex-wrap items-center gap-2 p-2.5">
             <span className="text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>
-              Join live session:
+              Liity käynnissä olevaan treeniin:
             </span>
             {availableLateJoiners.map((lifter) => (
               <button
@@ -536,7 +553,7 @@ export function SessionTab() {
                     await store.addParticipantToSession(activeSessionForMainUser.id, lifter.id);
                     setShowAddParticipant(false);
                   } catch (err) {
-                    setFormError(err instanceof Error ? err.message : 'Could not add lifter.');
+                    setFormError(err instanceof Error ? err.message : 'Treenaajan lisääminen epäonnistui.');
                   }
                 }}
                 className="bb-pill-active rounded-full px-3 py-1 text-xs font-bold"
@@ -555,11 +572,11 @@ export function SessionTab() {
           <div>
             <div className="mb-1.5 flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
-                Logging Set For
+                Kenelle kirjataan
               </span>
               {selectedLifterId !== mainUser.id && (
                 <span className="text-[11px] font-semibold" style={{ color: 'var(--accent-text)' }}>
-                  Logging for partner
+                  Kirjataan kaverille
                 </span>
               )}
             </div>
@@ -598,7 +615,7 @@ export function SessionTab() {
                 className="text-xs font-bold uppercase tracking-wider"
                 style={{ color: 'var(--text-muted)' }}
               >
-                Exercise
+                Liike
               </label>
               <button
                 type="button"
@@ -606,13 +623,13 @@ export function SessionTab() {
                 className="text-xs font-bold"
                 style={{ color: 'var(--accent-text)' }}
               >
-                {showQuickAddExercise ? 'Cancel' : '+ New Exercise'}
+                {showQuickAddExercise ? 'Peruuta' : '+ Uusi liike'}
               </button>
             </div>
 
             <select
               id="session-exercise-select"
-              aria-label="Exercise"
+              aria-label="Liike"
               value={selectedExercise?.id ?? ''}
               onChange={(e) => setSelectedExerciseId(e.target.value)}
               className="bb-input w-full px-3.5 py-2.5 text-sm font-bold"
@@ -628,27 +645,27 @@ export function SessionTab() {
           {/* Quick Inline Add Exercise */}
           {showQuickAddExercise && (
             <div className="bb-subcard space-y-2.5 p-3">
-              <div className="text-xs font-bold">Add New Exercise</div>
+              <div className="text-xs font-bold">Lisää uusi liike</div>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <input
                   type="text"
                   value={newExerciseName}
                   onChange={(e) => setNewExerciseName(e.target.value)}
-                  placeholder="e.g. Overhead Press"
-                  aria-label="New exercise name"
+                  placeholder="esim. Pystypunnerrus"
+                  aria-label="Uuden liikkeen nimi"
                   className="bb-input flex-1 px-3 py-2 text-sm"
                 />
                 <select
                   value={newExerciseCategory}
                   onChange={(e) => setNewExerciseCategory(e.target.value as ExerciseCategory)}
-                  aria-label="New exercise type"
+                  aria-label="Uuden liikkeen tyyppi"
                   className="bb-input px-3 py-2 text-sm"
                 >
-                  <option value="barbell">Barbell (kg)</option>
-                  <option value="dumbbell">Dumbbell (kg / DB)</option>
-                  <option value="machine">Machine / Cable (kg)</option>
-                  <option value="bodyweight">Bodyweight (reps only)</option>
-                  <option value="pullup">Pull-up modes (Assisted / BW / +kg)</option>
+                  <option value="barbell">Levytanko (kg)</option>
+                  <option value="dumbbell">Käsipaino (kg / kp)</option>
+                  <option value="machine">Laite / Talja (kg)</option>
+                  <option value="bodyweight">Kehonpaino (vain toistot)</option>
+                  <option value="pullup">Leuanveto (Kuminauha / KP / +kg)</option>
                 </select>
               </div>
               <button
@@ -657,34 +674,34 @@ export function SessionTab() {
                 onClick={handleQuickCreateExercise}
                 className="bb-btn-primary w-full py-2 text-xs"
               >
-                Save Exercise
+                Tallenna liike
               </button>
             </div>
           )}
 
           {/* Side-by-Side Vertical Sliders: Left = Reps (1-30), Right = Exercise Weight */}
-          <div className="grid grid-cols-2 gap-3" role="group" aria-label="Set reps and weight sliders">
+          <div className="grid grid-cols-2 gap-3" role="group" aria-label="Toistojen ja painon säätimet">
             <VerticalDiscreteSlider
               id="set-reps-slider"
-              label="Reps"
+              label="Toistot"
               badgeText="1–30"
               stops={repsStops}
               selectedIndex={repsIndex}
               onSelectIndex={setRepsIndex}
-              stepUpLabel="Increase reps"
-              stepDownLabel="Decrease reps"
+              stepUpLabel="Lisää toistoja"
+              stepDownLabel="Vähennä toistoja"
               trackTestId="reps-slider-track"
             />
 
             <VerticalDiscreteSlider
               id="set-weight-slider"
-              label="Weight"
+              label="Paino"
               badgeText={weightBadgeText}
               stops={weightStops}
               selectedIndex={weightIndex}
               onSelectIndex={setWeightIndex}
-              stepUpLabel="Increase weight"
-              stepDownLabel="Decrease weight"
+              stepUpLabel="Lisää painoa"
+              stepDownLabel="Vähennä painoa"
               trackTestId="weight-slider-track"
             />
           </div>
@@ -702,7 +719,7 @@ export function SessionTab() {
           <button type="submit" className="bb-btn-primary flex w-full items-center justify-center gap-2 py-3.5 text-sm">
             <Plus className="h-4 w-4" />
             <span>
-              Add Set for {lifterMap.get(selectedLifterId)?.name ?? 'Lifter'}
+              Lisää sarja ({lifterMap.get(selectedLifterId)?.name ?? 'Treenaaja'})
             </span>
           </button>
         </form>
@@ -712,19 +729,19 @@ export function SessionTab() {
       <section className="bb-widget p-4">
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-sm font-extrabold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
-            Live Session Sets
+            Treenin sarjat
           </h3>
           <span className="text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>
-            Real-time
+            Reaaliaikainen
           </span>
         </div>
 
         {exerciseGroups.length === 0 ? (
           <div className="bb-subcard flex flex-col items-center py-8 text-center">
             <Dumbbell className="mb-2 h-6 w-6" style={{ color: 'var(--text-muted)' }} />
-            <p className="text-sm font-semibold">No sets logged yet</p>
+            <p className="text-sm font-semibold">Ei vielä kirjattuja sarjoja</p>
             <p className="mt-0.5 text-xs" style={{ color: 'var(--text-muted)' }}>
-              Add your first set above — everyone in this session will see it instantly.
+              Lisää ensimmäinen sarja yllä — kaikki treenissä mukana olevat näkevät sen heti.
             </p>
           </div>
         ) : (
@@ -736,9 +753,9 @@ export function SessionTab() {
               return (
                 <div key={group.exerciseId} className="bb-subcard p-3">
                   <div className="mb-2 flex items-center justify-between">
-                    <h4 className="text-sm font-extrabold">{ex?.name ?? 'Exercise'}</h4>
+                    <h4 className="text-sm font-extrabold">{ex?.name ?? 'Liike'}</h4>
                     <span className="text-[11px] font-semibold" style={{ color: 'var(--text-muted)' }}>
-                      {group.sets.length} {group.sets.length === 1 ? 'set' : 'sets'}
+                      {group.sets.length} {group.sets.length === 1 ? 'sarja' : 'sarjaa'}
                     </span>
                   </div>
 
@@ -767,16 +784,22 @@ export function SessionTab() {
                           >
                             {ex.category === 'pullup' && (
                               <div className="grid grid-cols-3 gap-1.5">
-                                {(['assisted', 'bodyweight', 'weighted'] as const).map((m) => (
+                                {(
+                                  [
+                                    { id: 'assisted', label: 'Kuminauha' },
+                                    { id: 'bodyweight', label: 'Kehonpaino' },
+                                    { id: 'weighted', label: '+kg' },
+                                  ] as const
+                                ).map((m) => (
                                   <button
-                                    key={m}
+                                    key={m.id}
                                     type="button"
-                                    onClick={() => setEditPullupMode(m)}
-                                    className={`rounded-lg py-1 text-[11px] font-bold capitalize ${
-                                      editPullupMode === m ? 'bb-pill-active' : 'bb-pill-idle'
+                                    onClick={() => setEditPullupMode(m.id)}
+                                    className={`rounded-lg py-1 text-[11px] font-bold ${
+                                      editPullupMode === m.id ? 'bb-pill-active' : 'bb-pill-idle'
                                     }`}
                                   >
-                                    {m === 'weighted' ? '+kg' : m}
+                                    {m.label}
                                   </button>
                                 ))}
                               </div>
@@ -787,7 +810,7 @@ export function SessionTab() {
                                   type="number"
                                   min="0"
                                   step="0.5"
-                                  aria-label="Edit weight (kg)"
+                                  aria-label="Muokkaa painoa (kg)"
                                   value={editWeightInput}
                                   onChange={(e) => setEditWeightInput(e.target.value)}
                                   className="bb-input w-24 px-2.5 py-1.5 text-xs font-bold"
@@ -797,30 +820,30 @@ export function SessionTab() {
                                 type="number"
                                 min="1"
                                 max="999"
-                                aria-label="Edit reps"
+                                aria-label="Muokkaa toistoja"
                                 value={editRepsInput}
                                 onChange={(e) => setEditRepsInput(e.target.value)}
                                 className="bb-input w-20 px-2.5 py-1.5 text-xs font-bold"
                               />
                               <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                                reps
+                                toistoa
                               </span>
                               <div className="ml-auto flex items-center gap-1">
                                 <button
                                   type="button"
                                   onClick={() => saveEditSet(s)}
-                                  aria-label="Save set changes"
+                                  aria-label="Tallenna sarjan muutokset"
                                   className="bb-btn-primary px-2.5 py-1.5 text-xs"
                                 >
-                                  Save
+                                  Tallenna
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => setEditingSetId(null)}
-                                  aria-label="Cancel editing set"
+                                  aria-label="Peruuta sarjan muokkaus"
                                   className="bb-pill-idle rounded-lg px-2 py-1.5 text-xs"
                                 >
-                                  Cancel
+                                  Peruuta
                                 </button>
                               </div>
                             </div>
@@ -843,19 +866,19 @@ export function SessionTab() {
                             </span>
                             <div className="min-w-0">
                               <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                                <span className="font-bold">{lifter?.name ?? 'Unknown'}</span>
-                                <span style={{ color: 'var(--text-muted)' }}>Set #{setNum}</span>
+                                <span className="font-bold">{lifter?.name ?? 'Tuntematon'}</span>
+                                <span style={{ color: 'var(--text-muted)' }}>Sarja #{setNum}</span>
                                 {logger && logger.id !== s.lifterId && (
                                   <span
                                     className="text-[10px]"
                                     style={{ color: 'var(--text-muted)' }}
                                   >
-                                    (added by {logger.name})
+                                    (kirjasi {logger.name})
                                   </span>
                                 )}
                               </div>
                               <div className="text-sm font-extrabold" style={{ color: 'var(--accent-text)' }}>
-                                {formatSetLoad(s, ex)} × {s.reps} reps
+                                {formatSetLoad(s, ex)} × {s.reps} {s.reps === 1 ? 'toisto' : 'toistoa'}
                               </div>
                             </div>
                           </div>
@@ -864,7 +887,7 @@ export function SessionTab() {
                             <button
                               type="button"
                               onClick={() => beginEditSet(s)}
-                              aria-label={`Edit ${lifter?.name ?? ''} set ${setNum}`}
+                              aria-label={`Muokkaa treenaajan ${lifter?.name ?? ''} sarjaa ${setNum}`}
                               className="rounded-lg p-1.5 transition hover:opacity-80"
                               style={{ color: 'var(--text-muted)' }}
                             >
@@ -873,7 +896,7 @@ export function SessionTab() {
                             <button
                               type="button"
                               onClick={() => void store.deleteSet(s.id)}
-                              aria-label={`Delete ${lifter?.name ?? ''} set ${setNum}`}
+                              aria-label={`Poista treenaajan ${lifter?.name ?? ''} sarja ${setNum}`}
                               className="rounded-lg p-1.5 transition hover:opacity-80"
                               style={{ color: 'var(--danger)' }}
                             >

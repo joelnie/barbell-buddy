@@ -40,5 +40,5 @@ export function msUntilExpiry(expiresAtIso: string, now: Date = new Date()): num
 export function formatTimeShort(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleTimeString('fi-FI', { hour: '2-digit', minute: '2-digit' });
 }

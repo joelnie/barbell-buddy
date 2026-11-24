@@ -17,23 +17,23 @@ export function normalizeAndValidateSet(
 ): NormalizedSetFields {
   const reps = Math.round(Number(raw.reps));
   if (!Number.isFinite(reps) || reps < 1 || reps > 999) {
-    throw new Error('Reps must be between 1 and 999.');
+    throw new Error('Toistojen määrän on oltava välillä 1–999.');
   }
 
   if (exercise.category === 'pullup') {
     const mode: PullupMode = raw.pullupMode ?? 'bodyweight';
     if (mode !== 'assisted' && mode !== 'bodyweight' && mode !== 'weighted') {
-      throw new Error('Invalid pull-up mode.');
+      throw new Error('Virheellinen leuanvetotapa.');
     }
     if (mode === 'assisted' || mode === 'bodyweight') {
       if (raw.weightKg !== undefined && raw.weightKg !== null && Number(raw.weightKg) < 0) {
-        throw new Error('Pull-ups do not use negative weight. Choose Assisted mode instead.');
+        throw new Error('Leuanvedossa ei käytetä negatiivisia painoja. Valitse sen sijaan Kuminauha.');
       }
       return { pullupMode: mode, weightKg: null, reps };
     }
     const weight = Number(raw.weightKg ?? 0);
     if (!Number.isFinite(weight) || weight < 0) {
-      throw new Error('Additional pull-up weight must be 0 kg or greater (no negative weights).');
+      throw new Error('Lisäpainon on oltava vähintään 0 kg (ei negatiivisia painoja).');
     }
     return {
       pullupMode: 'weighted',
@@ -48,7 +48,7 @@ export function normalizeAndValidateSet(
 
   const weight = Number(raw.weightKg ?? 0);
   if (!Number.isFinite(weight) || weight < 0) {
-    throw new Error('Weight must be 0 kg or greater.');
+    throw new Error('Painon on oltava vähintään 0 kg.');
   }
 
   return {
@@ -65,17 +65,17 @@ export function formatWeightNumber(kg: number): string {
 export function formatSetLoad(set: WorkoutSet, exercise?: Exercise): string {
   if (exercise?.category === 'pullup' || set.pullupMode) {
     const mode = set.pullupMode ?? 'bodyweight';
-    if (mode === 'assisted') return 'Assisted';
-    if (mode === 'bodyweight') return 'Bodyweight';
+    if (mode === 'assisted') return 'Kuminauha';
+    if (mode === 'bodyweight') return 'Kehonpaino';
     const kg = set.weightKg ?? 0;
     return `+${formatWeightNumber(kg)} kg`;
   }
 
   if (exercise?.category === 'bodyweight' || set.weightKg === null) {
-    return 'Bodyweight';
+    return 'Kehonpaino';
   }
 
-  const unitSuffix = exercise?.category === 'dumbbell' ? 'kg / DB' : 'kg';
+  const unitSuffix = exercise?.category === 'dumbbell' ? 'kg / kp' : 'kg';
   return `${formatWeightNumber(set.weightKg)} ${unitSuffix}`;
 }
 
@@ -151,9 +151,9 @@ export function computeProgressionByLifter(params: {
 
   let yAxisUnit = 'kg';
   if (exercise.category === 'pullup') {
-    yAxisUnit = pullupMode === 'weighted' ? '+kg' : 'reps';
+    yAxisUnit = pullupMode === 'weighted' ? '+kg' : 'toistoa';
   } else if (exercise.category === 'bodyweight') {
-    yAxisUnit = 'reps';
+    yAxisUnit = 'toistoa';
   }
 
   for (const lifterId of lifterIds) {
@@ -179,7 +179,7 @@ export function computeProgressionByLifter(params: {
       if (exercise.category === 'pullup') {
         if (pullupMode === 'assisted' || pullupMode === 'bodyweight') {
           value = s.reps;
-          detailLabel = `${s.reps} reps`;
+          detailLabel = `${s.reps} ${s.reps === 1 ? 'toisto' : 'toistoa'}`;
         } else {
           const w = s.weightKg ?? 0;
           value = weightedMetric === 'e1rm' ? estimateOneRepMax(w, s.reps) : w;
@@ -187,7 +187,7 @@ export function computeProgressionByLifter(params: {
         }
       } else if (exercise.category === 'bodyweight') {
         value = s.reps;
-        detailLabel = `${s.reps} reps`;
+        detailLabel = `${s.reps} ${s.reps === 1 ? 'toisto' : 'toistoa'}`;
       } else {
         const w = s.weightKg ?? 0;
         value = weightedMetric === 'e1rm' ? estimateOneRepMax(w, s.reps) : w;

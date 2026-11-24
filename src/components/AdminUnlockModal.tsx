@@ -51,7 +51,7 @@ export function AdminUnlockModal() {
     try {
       const ok = await completeAdminUnlockWithPin(candidate);
       if (!ok) {
-        setError('Incorrect PIN. Please try again.');
+        setError('Väärä PIN-koodi. Yritä uudelleen.');
         setPin('');
       }
     } finally {
@@ -89,10 +89,10 @@ export function AdminUnlockModal() {
       if (ok) {
         completeAdminUnlockWithFaceId();
       } else {
-        setError('Face ID verification did not succeed. Use PIN instead.');
+        setError('Face ID -tunnistus ei onnistunut. Käytä PIN-koodia.');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Face ID verification cancelled.');
+      setError(err instanceof Error ? err.message : 'Face ID -tunnistus peruutettiin.');
     } finally {
       setBusy(false);
     }
@@ -109,7 +109,7 @@ export function AdminUnlockModal() {
         <button
           type="button"
           onClick={cancelAdminUnlock}
-          aria-label="Cancel admin unlock"
+          aria-label="Peruuta ylläpitäjän kirjautuminen"
           className="absolute top-3.5 right-3.5 rounded-full p-1.5 transition hover:opacity-80"
           style={{ color: 'var(--text-muted)' }}
         >
@@ -128,11 +128,11 @@ export function AdminUnlockModal() {
             <Lock className="h-5 w-5" />
           </div>
           <h2 id="admin-unlock-title" className="text-lg font-extrabold">
-            Switch to {pendingAdminTarget.name}
+            Vaihda käyttäjäksi {pendingAdminTarget.name}
           </h2>
           <p className="mt-0.5 text-xs" style={{ color: 'var(--text-muted)' }}>
-            Enter {pendingAdminTarget.name}&apos;s 4-digit admin PIN
-            {faceIdAvailable && faceIdEnrolled ? ' or use Face ID' : ''}.
+            Syötä käyttäjän {pendingAdminTarget.name} 4-numeroinen ylläpitäjän PIN-koodi
+            {faceIdAvailable && faceIdEnrolled ? ' tai käytä Face ID:tä' : ''}.
           </p>
         </div>
 
@@ -144,17 +144,17 @@ export function AdminUnlockModal() {
             className="bb-pill-active mb-4 flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-bold transition active:scale-[0.98]"
           >
             <ScanFace className="h-5 w-5" />
-            <span>Unlock with Face ID</span>
+            <span>Avaa Face ID:llä</span>
           </button>
         )}
 
         <form onSubmit={handleFormSubmit}>
           <label htmlFor="joel-pin-input" className="sr-only">
-            Joel Admin PIN
+            Joelin ylläpitäjän PIN-koodi
           </label>
           <input
             id="joel-pin-input"
-            aria-label="Joel Admin PIN"
+            aria-label="Joelin ylläpitäjän PIN-koodi"
             type="password"
             inputMode="numeric"
             autoComplete="one-time-code"
@@ -204,7 +204,7 @@ export function AdminUnlockModal() {
               className="bb-subcard py-3 text-xs font-semibold transition active:scale-95"
               style={{ color: 'var(--text-muted)' }}
             >
-              Clear
+              Tyhjennä
             </button>
             <button
               type="button"
@@ -218,7 +218,7 @@ export function AdminUnlockModal() {
               type="button"
               onClick={handleBackspace}
               disabled={busy}
-              aria-label="Backspace PIN digit"
+              aria-label="Poista PIN-numero"
               className="bb-subcard flex items-center justify-center py-3 transition active:scale-95"
             >
               <Delete className="h-4 w-4" />
@@ -230,7 +230,7 @@ export function AdminUnlockModal() {
             disabled={busy || pin.length !== 4}
             className="bb-btn-primary mt-3 w-full py-2.5 text-sm"
           >
-            {busy ? 'Verifying…' : 'Unlock'}
+            {busy ? 'Tarkistetaan…' : 'Avaa lukitus'}
           </button>
         </form>
       </div>

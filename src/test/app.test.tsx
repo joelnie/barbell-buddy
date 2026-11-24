@@ -4,6 +4,11 @@ import userEvent from '@testing-library/user-event';
 import App from '../App';
 import { LocalRealtimeStore } from '../lib/localStore';
 import { computeSessionExpiryIso } from '../lib/dates';
+import {
+  FINNISH_HERO_PHRASE_TEMPLATES,
+  formatHeroPhrase,
+  localizeExerciseName,
+} from '../lib/finnish';
 import { STARTER_EXERCISES } from '../lib/seedData';
 import {
   getRawWeightOptionsForExercise,
@@ -12,14 +17,14 @@ import {
 } from '../lib/sliderOptions';
 
 async function enterJoelKeypadPin(user: ReturnType<typeof userEvent.setup>, digits: string[]) {
-  const dialog = await screen.findByRole('dialog', { name: /switch to joel/i });
+  const dialog = await screen.findByRole('dialog', { name: /vaihda käyttäjäksi joel/i });
   for (const d of digits) {
     await user.click(within(dialog).getByRole('button', { name: d }));
   }
 }
 
-describe('Barbell Buddy PWA', () => {
-  it('seeds Julie, Joel, and Leevi plus all 5 starter exercises', async () => {
+describe('Barbell Buddy PWA (Suomi)', () => {
+  it('seeds Julie, Joel, and Leevi plus all 5 starter exercises in Finnish and localizes English DB rows', async () => {
     const store = new LocalRealtimeStore({ storageKey: 'test-seed' });
     await store.initialize();
     const snap = store.getSnapshot();
@@ -27,12 +32,76 @@ describe('Barbell Buddy PWA', () => {
     expect(snap.lifters.map((l) => l.name)).toEqual(['Julie', 'Joel', 'Leevi']);
     expect(snap.lifters.find((l) => l.name === 'Joel')?.isAdmin).toBe(true);
     expect(snap.exercises.map((e) => e.name)).toEqual([
-      'Pull-ups',
-      'Bench Press',
-      'Incline Dumbbell Bench Press',
-      'Deadlift',
-      'Squat',
+      'Leuanveto',
+      'Penkkipunnerrus',
+      'Vinopenkki käsipainoilla',
+      'Maastaveto',
+      'Kyykky',
     ]);
+
+    // Existing English Supabase / localStorage exercise rows localize seamlessly to Finnish
+    expect(localizeExerciseName('Pull-ups')).toBe('Leuanveto');
+    expect(localizeExerciseName('Bench Press')).toBe('Penkkipunnerrus');
+    expect(localizeExerciseName('Incline Dumbbell Bench Press')).toBe('Vinopenkki käsipainoilla');
+    expect(localizeExerciseName('Deadlift')).toBe('Maastaveto');
+    expect(localizeExerciseName('Squat')).toBe('Kyykky');
+
+    // Weight stop matcher recognizes both English and Finnish built-in names
+    expect(
+      getRawWeightOptionsForExercise({
+        id: 'uuid-from-supabase-1',
+        name: 'Deadlift',
+        category: 'barbell',
+        isBuiltin: true,
+        sortOrder: 4,
+        createdAt: '2026-01-01T00:00:00.000Z',
+      })[0],
+    ).toBe(25);
+    expect(
+      getRawWeightOptionsForExercise({
+        id: 'uuid-from-supabase-2',
+        name: 'Bench Press',
+        category: 'barbell',
+        isBuiltin: true,
+        sortOrder: 2,
+        createdAt: '2026-01-01T00:00:00.000Z',
+      }).slice(-1)[0],
+    ).toBe(120);
+    expect(
+      getRawWeightOptionsForExercise({
+        id: 'uuid-from-supabase-3',
+        name: 'Squat',
+        category: 'barbell',
+        isBuiltin: true,
+        sortOrder: 5,
+        createdAt: '2026-01-01T00:00:00.000Z',
+      }).slice(-1)[0],
+    ).toBe(150);
+
+    store.dispose();
+  });
+
+  it('includes all 22 variating Finnish motivational phrases and substitutes <user> on the idle view', async () => {
+    expect(FINNISH_HERO_PHRASE_TEMPLATES).toHaveLength(22);
+    expect(formatHeroPhrase('Valmiina treenaamaan, <user>?', 'Julie')).toBe(
+      'Valmiina treenaamaan, Julie?',
+    );
+    expect(formatHeroPhrase('Näytä niille, <user>!', 'Joel')).toBe('Näytä niille, Joel!');
+    expect(formatHeroPhrase('<user>, tänään liikkuu rauta!', 'Leevi')).toBe(
+      'Leevi, tänään liikkuu rauta!',
+    );
+    expect(FINNISH_HERO_PHRASE_TEMPLATES).toContain('Sohva voi odottaa, tanko ei.');
+    expect(FINNISH_HERO_PHRASE_TEMPLATES).toContain('Ei se paino itsestään nouse!');
+
+    const store = new LocalRealtimeStore({ storageKey: 'test-hero-phrases' });
+    await store.initialize();
+    localStorage.setItem('phrase-user', 'lifter-julie');
+    render(<App store={store} mainUserStorageKey="phrase-user" />);
+
+    const heading = await screen.findByTestId('idle-hero-greeting');
+    const validForJulie = FINNISH_HERO_PHRASE_TEMPLATES.map((t) => formatHeroPhrase(t, 'Julie'));
+    expect(validForJulie).toContain(heading.textContent);
+
     store.dispose();
   });
 
@@ -65,24 +134,24 @@ describe('Barbell Buddy PWA', () => {
     const leeviView = render(
       <App store={storeLeevi} mainUserStorageKey="leevi-main-user" />,
     );
-    expect(await leeviView.findByText(/Session 2026-11-24/i)).toBeInTheDocument();
-    expect(leeviView.getByRole('button', { name: /End Session/i })).toBeInTheDocument();
+    expect(await leeviView.findByText(/Treeni 2026-11-24/i)).toBeInTheDocument();
+    expect(leeviView.getByRole('button', { name: /Lopeta treeni/i })).toBeInTheDocument();
     leeviView.unmount();
 
-    // Render Julie's phone -> does NOT see Joel+Leevi's live session; sees "New Session" instead!
+    // Render Julie's phone -> does NOT see Joel+Leevi's live session; sees "Uusi treeni" instead!
     const user = userEvent.setup();
     localStorage.setItem('julie-main-user', 'lifter-julie');
     render(<App store={storeJulie} mainUserStorageKey="julie-main-user" />);
 
-    expect(await screen.findByText(/Ready to lift, Julie\?/i)).toBeInTheDocument();
-    expect(screen.queryByText(/Session 2026-11-24/i)).not.toBeInTheDocument();
+    expect(await screen.findByTestId('idle-hero-greeting')).toBeInTheDocument();
+    expect(screen.queryByText(/Treeni 2026-11-24/i)).not.toBeInTheDocument();
 
-    // Julie opens "New Session" -> Joel & Leevi are marked busy in another active session, while Julie can start her own session!
-    await user.click(screen.getByRole('button', { name: /New Session/i }));
-    expect(screen.getAllByText(/In another active session/i)).toHaveLength(2);
+    // Julie opens "Uusi treeni" -> Joel & Leevi are marked busy in another active session, while Julie can start her own session!
+    await user.click(screen.getByRole('button', { name: /Uusi treeni/i }));
+    expect(screen.getAllByText(/Toisessa käynnissä olevassa treenissä/i)).toHaveLength(2);
 
-    await user.click(screen.getByRole('button', { name: /Start Session \(1\)/i }));
-    expect(await screen.findByText(/Add Set for Julie/i)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Aloita treeni \(1\)/i }));
+    expect(await screen.findByText(/Lisää sarja \(Julie\)/i)).toBeInTheDocument();
 
     // Verify 2 distinct active sessions exist on the exact same day
     const allSessions = storeJulie.getSnapshot().sessions;
@@ -110,9 +179,9 @@ describe('Barbell Buddy PWA', () => {
     localStorage.setItem('phone-julie', 'lifter-julie');
     render(<App store={storeB} mainUserStorageKey="phone-julie" />);
 
-    expect(await screen.findByText(/No sets logged yet/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Ei vielä kirjattuja sarjoja/i)).toBeInTheDocument();
 
-    // Leevi (on storeA / another phone) logs a Bench Press set of 55 kg x 8 for Julie
+    // Leevi (on storeA / another phone) logs a Penkkipunnerrus set of 55 kg x 8 for Julie
     const activeSessionId = storeA.getSnapshot().sessions[0].id;
     await act(async () => {
       await storeA.addSet({
@@ -126,34 +195,34 @@ describe('Barbell Buddy PWA', () => {
     });
 
     // Julie's rendered UI updates automatically via BroadcastChannel without reloading!
-    expect(await screen.findByText(/55 kg × 8 reps/i)).toBeInTheDocument();
-    expect(screen.getByText(/\(added by Leevi\)/i)).toBeInTheDocument();
+    expect(await screen.findByText(/55 kg × 8 toistoa/i)).toBeInTheDocument();
+    expect(screen.getByText(/\(kirjasi Leevi\)/i)).toBeInTheDocument();
 
     // Julie can also log a set for Leevi directly from her UI using the two vertical sliders
     await user.click(screen.getByRole('button', { name: 'Leevi' }));
-    await user.selectOptions(screen.getByLabelText('Exercise'), 'ex-squat');
+    await user.selectOptions(screen.getByLabelText('Liike'), 'ex-squat');
 
     const squatEx = STARTER_EXERCISES.find((e) => e.id === 'ex-squat')!;
     const squatStops = getWeightSliderStopsForExercise(squatEx);
     const idx110 = squatStops.findIndex((s) => s.rawValue === 110);
 
-    fireEvent.change(screen.getByRole('slider', { name: 'Weight' }), {
+    fireEvent.change(screen.getByRole('slider', { name: 'Paino' }), {
       target: { value: String(idx110) },
     });
-    fireEvent.change(screen.getByRole('slider', { name: 'Reps' }), {
+    fireEvent.change(screen.getByRole('slider', { name: 'Toistot' }), {
       target: { value: '4' }, // index 4 => 5 reps
     });
 
-    await user.click(screen.getByRole('button', { name: /Add Set for Leevi/i }));
+    await user.click(screen.getByRole('button', { name: /Lisää sarja \(Leevi\)/i }));
 
-    expect(await screen.findByText(/110 kg × 5 reps/i)).toBeInTheDocument();
+    expect(await screen.findByText(/110 kg × 5 toistoa/i)).toBeInTheDocument();
     expect(storeA.getSnapshot().sets).toHaveLength(2);
 
     storeA.dispose();
     storeB.dispose();
   });
 
-  it('defines exact discrete slider stops for Reps (1-30), Pull-ups, Bench, Squat, Deadlift (25-180), and Dumbbells', () => {
+  it('defines exact discrete slider stops for Reps (1-30), Pull-ups (Kuminauha/Kehonpaino/+kg), Bench, Squat, Deadlift (25-180), and Dumbbells', () => {
     const repsStops = getRepsSliderStops();
     expect(repsStops).toHaveLength(30);
     expect(repsStops[0].rawValue).toBe(1);
@@ -176,6 +245,9 @@ describe('Barbell Buddy PWA', () => {
       27.5,
       30,
     ]);
+    const pullupStops = getWeightSliderStopsForExercise(pullups);
+    expect(pullupStops[0].primaryLabel).toBe('Kuminauha');
+    expect(pullupStops[1].primaryLabel).toBe('Kehonpaino');
 
     const bench = STARTER_EXERCISES.find((e) => e.id === 'ex-bench-press')!;
     const benchOpts = getRawWeightOptionsForExercise(bench);
@@ -207,7 +279,7 @@ describe('Barbell Buddy PWA', () => {
     expect(
       getRawWeightOptionsForExercise({
         id: 'ex-custom-curl',
-        name: 'Dumbbell Curl',
+        name: 'Hauiskääntö käsipainoilla',
         category: 'dumbbell',
         isBuiltin: false,
         sortOrder: 99,
@@ -219,7 +291,7 @@ describe('Barbell Buddy PWA', () => {
     expect(
       getRawWeightOptionsForExercise({
         id: 'ex-custom-dips',
-        name: 'Push-ups',
+        name: 'Etunojapunnerrus',
         category: 'bodyweight',
         isBuiltin: false,
         sortOrder: 100,
@@ -228,7 +300,7 @@ describe('Barbell Buddy PWA', () => {
     ).toEqual(['Bodyweight']);
   });
 
-  it('logs Pull-ups (Assisted, Bodyweight, +kg) and weighted lifts via vertical sliders, touch drag, and smart snapping', async () => {
+  it('logs Pull-ups (Kuminauha, Kehonpaino, +kg) and weighted lifts via vertical sliders, touch drag, and smart snapping', async () => {
     const user = userEvent.setup();
     const store = new LocalRealtimeStore({ storageKey: 'test-pullups-sliders' });
     await store.initialize();
@@ -236,36 +308,34 @@ describe('Barbell Buddy PWA', () => {
     localStorage.setItem('pullup-user', 'lifter-julie');
     render(<App store={store} mainUserStorageKey="pullup-user" />);
 
-    await user.click(await screen.findByRole('button', { name: /New Session/i }));
-    await user.click(screen.getByRole('button', { name: /Start Session/i }));
+    await user.click(await screen.findByRole('button', { name: /Uusi treeni/i }));
+    await user.click(screen.getByRole('button', { name: /Aloita treeni/i }));
 
-    // Separate Pull-up mode toggle row is replaced by the Weight vertical slider
-    expect(screen.queryByRole('group', { name: /Pull-up mode/i })).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Exercise')).toHaveValue('ex-pullups');
+    expect(screen.getByLabelText('Liike')).toHaveValue('ex-pullups');
 
-    const repsSlider = screen.getByRole('slider', { name: 'Reps' });
-    const weightSlider = screen.getByRole('slider', { name: 'Weight' });
+    const repsSlider = screen.getByRole('slider', { name: 'Toistot' });
+    const weightSlider = screen.getByRole('slider', { name: 'Paino' });
 
-    // Default for Pull-ups: Bodyweight (index 1) and 8 reps (index 7)
-    expect(weightSlider).toHaveAttribute('aria-valuetext', 'Bodyweight');
-    expect(repsSlider).toHaveAttribute('aria-valuetext', '8 reps');
+    // Default for Leuanveto: Kehonpaino (index 1) and 8 toistoa (index 7)
+    expect(weightSlider).toHaveAttribute('aria-valuetext', 'Kehonpaino');
+    expect(repsSlider).toHaveAttribute('aria-valuetext', '8 toistoa');
 
-    // 1. Step down 1 notch on Weight -> Assisted (index 0), step up twice on Reps -> 10 reps
-    await user.click(screen.getByRole('button', { name: 'Decrease weight' }));
-    expect(weightSlider).toHaveAttribute('aria-valuetext', 'Assisted');
-    await user.click(screen.getByRole('button', { name: 'Increase reps' }));
-    await user.click(screen.getByRole('button', { name: 'Increase reps' }));
-    expect(repsSlider).toHaveAttribute('aria-valuetext', '10 reps');
+    // 1. Step down 1 notch on Paino -> Kuminauha (index 0), step up twice on Toistot -> 10 toistoa
+    await user.click(screen.getByRole('button', { name: 'Vähennä painoa' }));
+    expect(weightSlider).toHaveAttribute('aria-valuetext', 'Kuminauha');
+    await user.click(screen.getByRole('button', { name: 'Lisää toistoja' }));
+    await user.click(screen.getByRole('button', { name: 'Lisää toistoja' }));
+    expect(repsSlider).toHaveAttribute('aria-valuetext', '10 toistoa');
 
-    await user.click(screen.getByRole('button', { name: /Add Set for Julie/i }));
-    expect(await screen.findByText(/Assisted × 10 reps/i)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Lisää sarja \(Julie\)/i }));
+    expect(await screen.findByText(/Kuminauha × 10 toistoa/i)).toBeInTheDocument();
 
-    // 2. Step up 1 notch on Weight -> Bodyweight (index 1), set Reps to 7 (index 6)
-    await user.click(screen.getByRole('button', { name: 'Increase weight' }));
-    expect(weightSlider).toHaveAttribute('aria-valuetext', 'Bodyweight');
+    // 2. Step up 1 notch on Paino -> Kehonpaino (index 1), set Toistot to 7 (index 6)
+    await user.click(screen.getByRole('button', { name: 'Lisää painoa' }));
+    expect(weightSlider).toHaveAttribute('aria-valuetext', 'Kehonpaino');
     fireEvent.change(repsSlider, { target: { value: '6' } });
-    await user.click(screen.getByRole('button', { name: /Add Set for Julie/i }));
-    expect(await screen.findByText(/Bodyweight × 7 reps/i)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Lisää sarja \(Julie\)/i }));
+    expect(await screen.findByText(/Kehonpaino × 7 toistoa/i)).toBeInTheDocument();
 
     // 3. Weighted Pull-ups via vertical pointer scrubbing on the track!
     const weightTrack = screen.getByTestId('weight-slider-track');
@@ -283,27 +353,26 @@ describe('Barbell Buddy PWA', () => {
     });
 
     // Pull-up stops length = 14 (maxIndex = 13). Index 6 => 12.5 kg (ratio = 6/13)
-    // yFromTop = usableHeight * (1 - 6/13) = 200 * (7/13) ≈ 107.69 => clientY = 100 + 16 + 107.69 = 223.69
     fireEvent.pointerDown(weightTrack, { pointerId: 1, clientY: 280 });
     fireEvent.pointerMove(weightTrack, { pointerId: 1, clientY: 223.7 });
     fireEvent.pointerUp(weightTrack, { pointerId: 1, clientY: 223.7 });
 
     expect(weightSlider).toHaveAttribute('aria-valuetext', '+12.5 kg');
     fireEvent.change(repsSlider, { target: { value: '4' } }); // 5 reps
-    await user.click(screen.getByRole('button', { name: /Add Set for Julie/i }));
-    expect(await screen.findByText(/\+12\.5 kg × 5 reps/i)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Lisää sarja \(Julie\)/i }));
+    expect(await screen.findByText(/\+12\.5 kg × 5 toistoa/i)).toBeInTheDocument();
 
-    // 4. Switch to Deadlift -> minimum stop is 25 kg (index 0), top stop is 180 kg (index 62)
-    await user.selectOptions(screen.getByLabelText('Exercise'), 'ex-deadlift');
+    // 4. Switch to Maastaveto -> minimum stop is 25 kg (index 0), top stop is 180 kg (index 62)
+    await user.selectOptions(screen.getByLabelText('Liike'), 'ex-deadlift');
     fireEvent.change(weightSlider, { target: { value: '0' } });
     expect(weightSlider).toHaveAttribute('aria-valuetext', '25 kg');
     fireEvent.change(weightSlider, { target: { value: '62' } });
     expect(weightSlider).toHaveAttribute('aria-valuetext', '180 kg');
 
-    // Switch back to Pull-ups -> smartly snaps back to Julie's last Pull-up set (+12.5 kg x 5 reps)
-    await user.selectOptions(screen.getByLabelText('Exercise'), 'ex-pullups');
+    // Switch back to Leuanveto -> smartly snaps back to Julie's last Pull-up set (+12.5 kg x 5 toistoa)
+    await user.selectOptions(screen.getByLabelText('Liike'), 'ex-pullups');
     expect(weightSlider).toHaveAttribute('aria-valuetext', '+12.5 kg');
-    expect(repsSlider).toHaveAttribute('aria-valuetext', '5 reps');
+    expect(repsSlider).toHaveAttribute('aria-valuetext', '5 toistoa');
 
     const sets = store.getSnapshot().sets;
     expect(sets).toHaveLength(3);
@@ -322,12 +391,12 @@ describe('Barbell Buddy PWA', () => {
         reps: 8,
         loggedBy: 'lifter-julie',
       }),
-    ).rejects.toThrow(/0 kg or greater|negative/i);
+    ).rejects.toThrow(/0 kg|negatiivisia/i);
 
     store.dispose();
   });
 
-  it('auto-saves and finalizes unended sessions at 23:59 local time and displays sets in History', async () => {
+  it('auto-saves and finalizes unended sessions at 23:59 local time and displays sets in Historia', async () => {
     const user = userEvent.setup();
     const store = new LocalRealtimeStore({ storageKey: 'test-autosave-2359' });
     await store.initialize();
@@ -340,7 +409,6 @@ describe('Barbell Buddy PWA', () => {
       now: morningOfSession,
     });
 
-    // Verify expiry is 23:59:59.999 local time on 2026-11-20
     expect(session.expiresAt).toBe(computeSessionExpiryIso('2026-11-20'));
     const expiryLocal = new Date(session.expiresAt);
     expect(expiryLocal.getHours()).toBe(23);
@@ -360,20 +428,20 @@ describe('Barbell Buddy PWA', () => {
     expect(sweptBefore).toBe(0);
     expect(store.getSnapshot().sessions[0].status).toBe('active');
 
-    // Just after 23:59:59, sweep finalizes the session automatically without pressing End Session
+    // Just after 23:59:59, sweep finalizes the session automatically without pressing Lopeta treeni
     const sweptAfter = await store.sweepExpiredSessions(new Date(2026, 10, 21, 0, 0, 1));
     expect(sweptAfter).toBe(1);
     expect(store.getSnapshot().sessions[0].status).toBe('completed');
     expect(store.getSnapshot().sessions[0].endedAt).toBe(session.expiresAt);
 
-    // Open History tab and click the 2026-11-20 session -> shows Deadlift 160 kg x 4 reps
+    // Open Historia tab and click the 2026-11-20 session -> shows Maastaveto 160 kg x 4 toistoa
     localStorage.setItem('history-user', 'lifter-julie');
     render(<App store={store} mainUserStorageKey="history-user" />);
-    await user.click(await screen.findByRole('tab', { name: /History/i }));
+    await user.click(await screen.findByRole('tab', { name: /Historia/i }));
 
     const sessionCardButton = await screen.findByRole('button', { name: /2026-11-20/i });
     await user.click(sessionCardButton);
-    expect(await screen.findByText(/160 kg × 4 reps/i)).toBeInTheDocument();
+    expect(await screen.findByText(/160 kg × 4 toistoa/i)).toBeInTheDocument();
 
     store.dispose();
   });
@@ -404,92 +472,97 @@ describe('Barbell Buddy PWA', () => {
     render(<App store={store} mainUserStorageKey="admin-test-user" />);
 
     // First-visit onboarding: pick Julie (no PIN needed)
-    const onboarding = await screen.findByRole('dialog', { name: /who's using this phone/i });
+    const onboarding = await screen.findByRole('dialog', { name: /kuka käyttää tätä puhelinta/i });
     await user.click(within(onboarding).getByRole('button', { name: /Julie/i }));
-    expect(await screen.findByText(/Ready to lift, Julie\?/i)).toBeInTheDocument();
+    expect(await screen.findByTestId('idle-hero-greeting')).toBeInTheDocument();
 
-    // Navigate to Settings as Julie
-    await user.click(screen.getByRole('tab', { name: /Settings/i }));
+    // Navigate to Asetukset as Julie
+    await user.click(screen.getByRole('tab', { name: /Asetukset/i }));
 
-    // Julie CAN add a new user ("Alex") and a new exercise ("Overhead Press")
-    await user.type(screen.getByLabelText('New user name'), 'Alex');
-    await user.click(screen.getByRole('button', { name: 'Add User' }));
-    expect(await screen.findByText(/Added Alex!/i)).toBeInTheDocument();
+    // Julie CAN add a new user ("Alex") and a new exercise ("Pystypunnerrus")
+    await user.type(screen.getByLabelText('Uuden käyttäjän nimi'), 'Alex');
+    await user.click(screen.getByRole('button', { name: 'Lisää käyttäjä' }));
+    expect(await screen.findByText(/Lisättiin Alex!/i)).toBeInTheDocument();
 
-    await user.type(screen.getByLabelText('Manage new exercise name'), 'Overhead Press');
-    await user.click(screen.getByRole('button', { name: 'Add Exercise' }));
-    expect(await screen.findByText('Overhead Press')).toBeInTheDocument();
+    await user.type(screen.getByLabelText('Hallittavan uuden liikkeen nimi'), 'Pystypunnerrus');
+    await user.click(screen.getByRole('button', { name: 'Lisää liike' }));
+    expect(await screen.findByText('Pystypunnerrus')).toBeInTheDocument();
 
     // Julie CANNOT see user delete or exercise remove buttons
-    expect(screen.queryByRole('button', { name: /Delete user Alex/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Poista käyttäjä Alex/i })).not.toBeInTheDocument();
     expect(
-      screen.queryByRole('button', { name: /Remove exercise Overhead Press/i }),
+      screen.queryByRole('button', { name: /Poista liike Pystypunnerrus/i }),
     ).not.toBeInTheDocument();
 
     // Store-level enforcement also blocks non-admin deletions
     const alex = store.getSnapshot().lifters.find((l) => l.name === 'Alex')!;
-    const ohp = store.getSnapshot().exercises.find((e) => e.name === 'Overhead Press')!;
-    await expect(store.deleteLifter(alex.id, 'lifter-julie')).rejects.toThrow(/Only Joel/i);
-    await expect(store.deleteExercise(ohp.id, 'lifter-julie')).rejects.toThrow(/Only Joel/i);
+    const ohp = store.getSnapshot().exercises.find((e) => e.name === 'Pystypunnerrus')!;
+    await expect(store.deleteLifter(alex.id, 'lifter-julie')).rejects.toThrow(/Vain Joel/i);
+    await expect(store.deleteExercise(ohp.id, 'lifter-julie')).rejects.toThrow(/Vain Joel/i);
 
     // Switch Main User to Joel -> prompts for PIN
-    await user.click(screen.getByRole('button', { name: /Joel.*Requires 4-digit PIN/i }));
+    await user.click(screen.getByRole('button', { name: /Joel.*Vaatii 4-numeroisen PIN-koodin/i }));
 
     // Wrong PIN is rejected
     await enterJoelKeypadPin(user, ['1', '1', '1', '1']);
-    expect(await screen.findByText(/Incorrect PIN/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Väärä PIN-koodi/i)).toBeInTheDocument();
 
     // Valid PIN unlocks Joel
     const validDigits = String(1290 * 2).split('');
     await enterJoelKeypadPin(user, validDigits);
 
     await waitFor(() => {
-      expect(screen.queryByRole('dialog', { name: /switch to joel/i })).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('dialog', { name: /vaihda käyttäjäksi joel/i }),
+      ).not.toBeInTheDocument();
     });
 
     // Now active as Joel -> can enroll iPhone Face ID
-    const enableFaceIdBtn = await screen.findByRole('button', { name: /Enable Face ID/i });
+    const enableFaceIdBtn = await screen.findByRole('button', { name: /Ota Face ID käyttöön/i });
     await user.click(enableFaceIdBtn);
-    expect(await screen.findByText(/Face ID enabled for switching to Joel/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Face ID otettu käyttöön Joelin tiliä varten/i),
+    ).toBeInTheDocument();
 
-    // As Joel, delete Alex and remove Overhead Press (while Joel cannot delete himself)
-    expect(screen.queryByRole('button', { name: /Delete user Joel/i })).not.toBeInTheDocument();
+    // As Joel, delete Alex and remove Pystypunnerrus (while Joel cannot delete himself)
+    expect(screen.queryByRole('button', { name: /Poista käyttäjä Joel/i })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: /Delete user Alex/i }));
-    await user.click(screen.getByRole('button', { name: /Confirm delete user Alex/i }));
+    await user.click(screen.getByRole('button', { name: /Poista käyttäjä Alex/i }));
+    await user.click(screen.getByRole('button', { name: /Vahvista käyttäjän Alex poisto/i }));
     await waitFor(() => {
       expect(store.getSnapshot().lifters.some((l) => l.name === 'Alex')).toBe(false);
     });
 
-    await user.click(screen.getByRole('button', { name: /Remove exercise Overhead Press/i }));
+    await user.click(screen.getByRole('button', { name: /Poista liike Pystypunnerrus/i }));
     await user.click(
-      screen.getByRole('button', { name: /Confirm remove exercise Overhead Press/i }),
+      screen.getByRole('button', { name: /Vahvista liikkeen Pystypunnerrus poisto/i }),
     );
     await waitFor(() => {
-      expect(store.getSnapshot().exercises.some((e) => e.name === 'Overhead Press')).toBe(false);
+      expect(store.getSnapshot().exercises.some((e) => e.name === 'Pystypunnerrus')).toBe(false);
     });
 
     // Switch to Leevi (no PIN), then switch back to Joel using enrolled Face ID!
-    await user.click(screen.getByRole('button', { name: /Leevi.*Tap to switch/i }));
-    await user.click(screen.getByRole('button', { name: /Joel.*Requires 4-digit PIN/i }));
+    await user.click(screen.getByRole('button', { name: /Leevi.*Vaihda napauttamalla/i }));
+    await user.click(screen.getByRole('button', { name: /Joel.*Vaatii 4-numeroisen PIN-koodin/i }));
 
-    const faceIdBtn = await screen.findByRole('button', { name: /Unlock with Face ID/i });
+    const faceIdBtn = await screen.findByRole('button', { name: /Avaa Face ID:llä/i });
     await user.click(faceIdBtn);
 
     await waitFor(() => {
-      expect(screen.queryByRole('dialog', { name: /switch to joel/i })).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('dialog', { name: /vaihda käyttäjäksi joel/i }),
+      ).not.toBeInTheDocument();
     });
     expect(navigator.credentials.get).toHaveBeenCalledTimes(1);
 
     store.dispose();
   });
 
-  it('switches between Light, Dark, and Pink themes and applies Secondary App Colors', async () => {
+  it('switches between Vaalea, Tumma, and Pinkki themes and applies Finnish Secondary App Colors', async () => {
     const user = userEvent.setup();
     const store = new LocalRealtimeStore({ storageKey: 'test-themes' });
     await store.initialize();
 
-    // Ensure meta[name="theme-color"] exists in test document
     let meta = document.querySelector('meta[name="theme-color"]');
     if (!meta) {
       meta = document.createElement('meta');
@@ -500,40 +573,38 @@ describe('Barbell Buddy PWA', () => {
     localStorage.setItem('theme-test-user', 'lifter-julie');
     render(<App store={store} mainUserStorageKey="theme-test-user" />);
 
-    await user.click(await screen.findByRole('tab', { name: /Settings/i }));
+    await user.click(await screen.findByRole('tab', { name: /Asetukset/i }));
 
-    const themeGroup = screen.getByRole('group', { name: /Color theme/i });
-    const accentGroup = screen.getByRole('group', { name: /Secondary app color/i });
+    const themeGroup = screen.getByRole('group', { name: /Väriteema/i });
+    const accentGroup = screen.getByRole('group', { name: /Sovelluksen korostusväri/i });
 
-    // Default is dark + neon-green
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
     expect(document.documentElement.getAttribute('data-accent')).toBe('neon-green');
 
-    // Change secondary color in Dark theme to Turquoise and Bright Orange
-    await user.click(within(accentGroup).getByRole('button', { name: /Turquoise/i }));
+    await user.click(within(accentGroup).getByRole('button', { name: /Turkoosi/i }));
     expect(document.documentElement.getAttribute('data-accent')).toBe('turquoise');
 
-    await user.click(within(accentGroup).getByRole('button', { name: /Bright Orange/i }));
+    await user.click(within(accentGroup).getByRole('button', { name: /Kirkkaanoranssi/i }));
     expect(document.documentElement.getAttribute('data-accent')).toBe('bright-orange');
 
-    // Switch to Light theme -> secondary color selector remains active and customizable
-    await user.click(within(themeGroup).getByRole('button', { name: /^Light$/i }));
+    await user.click(within(themeGroup).getByRole('button', { name: /^Vaalea$/i }));
     expect(document.documentElement.getAttribute('data-theme')).toBe('light');
     expect(meta.getAttribute('content')).toBe('#f4f7fb');
 
-    const lightAccentGroup = screen.getByRole('group', { name: /Secondary app color/i });
-    await user.click(within(lightAccentGroup).getByRole('button', { name: /Neon Green/i }));
+    const lightAccentGroup = screen.getByRole('group', { name: /Sovelluksen korostusväri/i });
+    await user.click(within(lightAccentGroup).getByRole('button', { name: /Neonvihreä/i }));
     expect(document.documentElement.getAttribute('data-accent')).toBe('neon-green');
 
-    // Switch to Pink / Light Pink theme
-    await user.click(within(themeGroup).getByRole('button', { name: /Pink \/ Light Pink/i }));
+    await user.click(
+      within(themeGroup).getByRole('button', { name: /Pinkki \/ Vaaleanpunainen/i }),
+    );
     expect(document.documentElement.getAttribute('data-theme')).toBe('pink');
     expect(meta.getAttribute('content')).toBe('#fff1f5');
 
     store.dispose();
   });
 
-  it('tracks multi-user progression charts and personal records in the Progress tab', async () => {
+  it('tracks multi-user progression charts and personal records in the Kehitys tab', async () => {
     const user = userEvent.setup();
     const store = new LocalRealtimeStore({ storageKey: 'test-progress-tab' });
     await store.initialize();
@@ -565,9 +636,11 @@ describe('Barbell Buddy PWA', () => {
     localStorage.setItem('progress-test-user', 'lifter-julie');
     render(<App store={store} mainUserStorageKey="progress-test-user" />);
 
-    await user.click(await screen.findByRole('tab', { name: /Progress/i }));
+    await user.click(await screen.findByRole('tab', { name: /Kehitys/i }));
 
-    expect(await screen.findByRole('img', { name: /Bench Press progression chart/i })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('img', { name: /Liikkeen Penkkipunnerrus kehityskaavio/i }),
+    ).toBeInTheDocument();
     expect(screen.getByText('95 kg')).toBeInTheDocument();
     expect(screen.getByText('52.5 kg')).toBeInTheDocument();
 

@@ -39,7 +39,7 @@ export function Header({ onSelectTab }: HeaderProps) {
               {isOffline ? (
                 <>
                   <WifiOff className="h-3 w-3 text-rose-500" />
-                  <span>Offline</span>
+                  <span>Ei yhteyttä</span>
                 </>
               ) : (
                 <>
@@ -49,7 +49,7 @@ export function Header({ onSelectTab }: HeaderProps) {
                   />
                   <Wifi className="h-3 w-3" style={{ color: 'var(--accent-text)' }} />
                   <span>
-                    {snapshot.mode === 'supabase' ? 'Live Cloud Sync' : 'Live Realtime Sync'}
+                    {snapshot.mode === 'supabase' ? 'Reaaliaikainen pilvisynkronointi' : 'Reaaliaikainen synkronointi'}
                   </span>
                 </>
               )}
@@ -61,7 +61,7 @@ export function Header({ onSelectTab }: HeaderProps) {
           <button
             type="button"
             onClick={() => onSelectTab('settings')}
-            aria-label={`Current user: ${mainUser.name}. Tap to open Settings`}
+            aria-label={`Nykyinen käyttäjä: ${mainUser.name}. Avaa asetukset napauttamalla`}
             className="flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold transition active:scale-95"
             style={{
               backgroundColor: 'var(--bg-elevated)',
@@ -80,7 +80,7 @@ export function Header({ onSelectTab }: HeaderProps) {
               <ShieldCheck
                 className="h-3.5 w-3.5"
                 style={{ color: 'var(--accent-text)' }}
-                aria-label="Admin"
+                aria-label="Ylläpitäjä"
               />
             )}
           </button>

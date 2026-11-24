@@ -17,7 +17,7 @@ export function CrewAuthScreen() {
     try {
       await store.signInCrew(passcode, email);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not verify crew passcode.');
+      setError(err instanceof Error ? err.message : 'Porukan salasanan tarkistus epäonnistui.');
     } finally {
       setSubmitting(false);
     }
@@ -39,14 +39,14 @@ export function CrewAuthScreen() {
           </div>
           <h1 className="text-xl font-extrabold">Barbell Buddy</h1>
           <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
-            Enter your Shared Crew Passcode once to connect this phone to real-time gym sync.
+            Syötä yhteinen porukan salasana kerran yhdistääksesi puhelimen reaaliaikaiseen salisynkronointiin.
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label htmlFor="crew-email" className="mb-1 block text-xs font-semibold">
-              Crew Account Email
+              Porukan tilin sähköposti
             </label>
             <input
               id="crew-email"
@@ -60,7 +60,7 @@ export function CrewAuthScreen() {
 
           <div>
             <label htmlFor="crew-passcode" className="mb-1 block text-xs font-semibold">
-              Shared Crew Passcode
+              Yhteinen porukan salasana
             </label>
             <div className="relative">
               <KeyRound
@@ -72,7 +72,7 @@ export function CrewAuthScreen() {
                 type="password"
                 value={passcode}
                 onChange={(e) => setPasscode(e.target.value)}
-                placeholder="Enter crew passcode"
+                placeholder="Syötä porukan salasana"
                 className="bb-input w-full py-2.5 pr-3 pl-9 text-sm"
                 required
               />
@@ -94,7 +94,7 @@ export function CrewAuthScreen() {
             disabled={submitting || !passcode.trim()}
             className="bb-btn-primary w-full py-3 text-sm"
           >
-            {submitting ? 'Connecting…' : 'Connect Phone'}
+            {submitting ? 'Yhdistetään…' : 'Yhdistä puhelin'}
           </button>
         </form>
       </div>

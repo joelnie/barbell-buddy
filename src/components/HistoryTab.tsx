@@ -46,9 +46,9 @@ export function HistoryTab() {
       <section className="bb-widget p-4">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-extrabold">Previous Sessions</h2>
+            <h2 className="text-lg font-extrabold">Aiemmat treenit</h2>
             <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-              Tap any session date to inspect all sets, reps, and weights.
+              Napauta treenipäivää nähdäksesi kaikki tehdyt liikkeet, sarjat, toistot ja painot.
             </p>
           </div>
           <span
@@ -60,7 +60,7 @@ export function HistoryTab() {
         </div>
 
         {/* Lifter Filter Pills */}
-        <div className="mt-3 flex flex-wrap gap-1.5" role="group" aria-label="Filter sessions by lifter">
+        <div className="mt-3 flex flex-wrap gap-1.5" role="group" aria-label="Suodata treenejä treenaajan mukaan">
           <button
             type="button"
             onClick={() => setLifterFilter('all')}
@@ -69,7 +69,7 @@ export function HistoryTab() {
               lifterFilter === 'all' ? 'bb-pill-active' : 'bb-pill-idle'
             }`}
           >
-            Everyone
+            Kaikki
           </button>
           {snapshot.lifters.map((lifter) => (
             <button
@@ -94,9 +94,9 @@ export function HistoryTab() {
       {filteredSessions.length === 0 ? (
         <section className="bb-widget flex flex-col items-center p-8 text-center">
           <CalendarClock className="mb-2.5 h-8 w-8" style={{ color: 'var(--text-muted)' }} />
-          <h3 className="text-base font-bold">No completed sessions yet</h3>
+          <h3 className="text-base font-bold">Ei vielä valmiita treenejä</h3>
           <p className="mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>
-            Ended sessions (and sessions auto-saved at 23:59) appear here for everyone to browse.
+            Päätetyt treenit (sekä klo 23.59 automaattisesti tallennetut treenit) näkyvät täällä kaikille.
           </p>
         </section>
       ) : (
@@ -150,7 +150,7 @@ export function HistoryTab() {
                           color: 'var(--accent-text)',
                         }}
                       >
-                        {sessionSets.length} {sessionSets.length === 1 ? 'set' : 'sets'}
+                        {sessionSets.length} {sessionSets.length === 1 ? 'sarja' : 'sarjaa'}
                       </span>
                     </div>
 
@@ -197,7 +197,7 @@ export function HistoryTab() {
                     {groups.length === 0 ? (
                       <div className="flex items-center gap-2 py-2 text-xs" style={{ color: 'var(--text-muted)' }}>
                         <Dumbbell className="h-4 w-4" />
-                        <span>No sets were recorded in this session.</span>
+                        <span>Tähän treeniin ei kirjattu sarjoja.</span>
                       </div>
                     ) : (
                       groups.map((g) => {
@@ -207,7 +207,7 @@ export function HistoryTab() {
                         return (
                           <div key={g.exerciseId} className="bb-subcard p-3">
                             <h4 className="mb-2 text-xs font-extrabold uppercase tracking-wider">
-                              {ex?.name ?? 'Removed Exercise'}
+                              {ex?.name ?? 'Poistettu liike'}
                             </h4>
                             <div className="space-y-1.5">
                               {g.sets.map((s) => {
@@ -226,11 +226,11 @@ export function HistoryTab() {
                                         className="h-2.5 w-2.5 rounded-full"
                                         style={{ backgroundColor: lifter?.avatarColor ?? '#64748b' }}
                                       />
-                                      <span className="font-bold">{lifter?.name ?? 'Unknown'}</span>
+                                      <span className="font-bold">{lifter?.name ?? 'Tuntematon'}</span>
                                       <span style={{ color: 'var(--text-muted)' }}>#{num}</span>
                                     </div>
                                     <span className="font-extrabold" style={{ color: 'var(--accent-text)' }}>
-                                      {formatSetLoad(s, ex)} × {s.reps} reps
+                                      {formatSetLoad(s, ex)} × {s.reps} {s.reps === 1 ? 'toisto' : 'toistoa'}
                                     </span>
                                   </div>
                                 );

@@ -1,0 +1,89 @@
+import type { Exercise } from '../types/models';
+
+export const FINNISH_HERO_PHRASE_TEMPLATES: readonly string[] = [
+  'Valmiina treenaamaan, <user>?',
+  'Näytä niille, <user>!',
+  '<user>, tänään liikkuu rauta!',
+  'Sohva voi odottaa, tanko ei.',
+  'Ensin treeni, sitten herkku.',
+  'Jalkapäivää ei skipata, piste.',
+  'Painovoima on tänään vain ehdotus.',
+  'Peili kiittää myöhemmin.',
+  'Hiki on rasvan itkua.',
+  'Vähemmän puhetta, enemmän rautaa!',
+  'Tänään rikotaan ennätyksiä, ei lupauksia.',
+  'Selitykset jäävät pukuhuoneeseen.',
+  'Maitohapot ovat vain hauiksen halauksia.',
+  'Lihakset eivät kasva Netflixiä katsomalla.',
+  'Huomisen sinä kiittää tätä päivää.',
+  'Kroppa valittaa, sinä et kuuntele.',
+  'Proteiinipirtelö pitää ansaita!',
+  'Pumppi päälle, maailma odottakoon.',
+  'Tanko on yksinäinen, mene moikkaamaan!',
+  'Tänään kyykätään, huomenna ontutaan.',
+  'Ole se, jota levytangot pelkäävät.',
+  'Ei se paino itsestään nouse!',
+];
+
+export function formatHeroPhrase(template: string, userName: string): string {
+  return template.replace(/<user>/g, userName);
+}
+
+export function pickRandomHeroPhraseTemplate(
+  excludeTemplate?: string,
+  randomFn: () => number = Math.random,
+): string {
+  const pool =
+    excludeTemplate && FINNISH_HERO_PHRASE_TEMPLATES.length > 1
+      ? FINNISH_HERO_PHRASE_TEMPLATES.filter((item) => item !== excludeTemplate)
+      : FINNISH_HERO_PHRASE_TEMPLATES;
+  const idx = Math.max(0, Math.min(pool.length - 1, Math.floor(randomFn() * pool.length)));
+  return pool[idx];
+}
+
+const BUILTIN_EXERCISE_TRANSLATIONS: Record<string, string> = {
+  'pull-ups': 'Leuanveto',
+  pullups: 'Leuanveto',
+  leuanveto: 'Leuanveto',
+  'bench press': 'Penkkipunnerrus',
+  penkkipunnerrus: 'Penkkipunnerrus',
+  'incline dumbbell bench press': 'Vinopenkki käsipainoilla',
+  'vinopenkki käsipainoilla': 'Vinopenkki käsipainoilla',
+  deadlift: 'Maastaveto',
+  maastaveto: 'Maastaveto',
+  squat: 'Kyykky',
+  kyykky: 'Kyykky',
+};
+
+export function localizeExerciseName(name: string): string {
+  const key = name.trim().toLowerCase();
+  return BUILTIN_EXERCISE_TRANSLATIONS[key] ?? name.trim();
+}
+
+export function localizeExercise(exercise: Exercise): Exercise {
+  const localizedName = localizeExerciseName(exercise.name);
+  if (localizedName === exercise.name) return exercise;
+  return {
+    ...exercise,
+    name: localizedName,
+  };
+}
+
+export function isBenchPressExercise(exercise: Pick<Exercise, 'id' | 'name'>): boolean {
+  const norm = exercise.name.trim().toLowerCase();
+  return (
+    exercise.id === 'ex-bench-press' ||
+    norm === 'bench press' ||
+    norm === 'penkkipunnerrus'
+  );
+}
+
+export function isSquatExercise(exercise: Pick<Exercise, 'id' | 'name'>): boolean {
+  const norm = exercise.name.trim().toLowerCase();
+  return exercise.id === 'ex-squat' || norm === 'squat' || norm === 'kyykky';
+}
+
+export function isDeadliftExercise(exercise: Pick<Exercise, 'id' | 'name'>): boolean {
+  const norm = exercise.name.trim().toLowerCase();
+  return exercise.id === 'ex-deadlift' || norm === 'deadlift' || norm === 'maastaveto';
+}

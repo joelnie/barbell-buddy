@@ -141,7 +141,7 @@ export function VerticalDiscreteSlider({
       {/* Prominent Live Value Readout */}
       <div
         aria-live="polite"
-        className="mb-2.5 flex min-h-[56px] w-full flex-col items-center justify-center rounded-xl px-2 py-1.5 text-center"
+        className="mb-2.5 flex h-[60px] w-full flex-col items-center justify-center rounded-xl px-2 py-1.5 text-center"
         style={{
           backgroundColor: 'var(--bg-surface)',
           border: '1.5px solid var(--accent-border)',

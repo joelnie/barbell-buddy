@@ -68,9 +68,9 @@ export function SettingsTab() {
         avatarColor: newUserColor,
       });
       setNewUserName('');
-      setUserMessage(`Added ${created.name}!`);
+      setUserMessage(`Lisättiin ${created.name}!`);
     } catch (err) {
-      setUserError(err instanceof Error ? err.message : 'Failed to add user.');
+      setUserError(err instanceof Error ? err.message : 'Käyttäjän lisääminen epäonnistui.');
     }
   };
 
@@ -82,7 +82,7 @@ export function SettingsTab() {
       await store.deleteLifter(targetId, mainUser.id);
       setConfirmDeleteLifterId(null);
     } catch (err) {
-      setUserError(err instanceof Error ? err.message : 'Could not delete user.');
+      setUserError(err instanceof Error ? err.message : 'Käyttäjän poistaminen epäonnistui.');
     }
   };
 
@@ -96,7 +96,7 @@ export function SettingsTab() {
       });
       setNewExerciseName('');
     } catch (err) {
-      setExerciseError(err instanceof Error ? err.message : 'Failed to add exercise.');
+      setExerciseError(err instanceof Error ? err.message : 'Liikkeen lisääminen epäonnistui.');
     }
   };
 
@@ -107,7 +107,7 @@ export function SettingsTab() {
       await store.deleteExercise(targetExerciseId, mainUser.id);
       setConfirmDeleteExerciseId(null);
     } catch (err) {
-      setExerciseError(err instanceof Error ? err.message : 'Could not remove exercise.');
+      setExerciseError(err instanceof Error ? err.message : 'Liikkeen poistaminen epäonnistui.');
     }
   };
 
@@ -117,35 +117,35 @@ export function SettingsTab() {
     try {
       await enrollFaceIdForAdmin(mainUser);
       setFaceIdEnrolled(true);
-      setFaceIdNotice('Face ID enabled for switching to Joel on this device.');
+      setFaceIdNotice('Face ID otettu käyttöön Joelin tiliä varten tällä laitteella.');
     } catch (err) {
-      setFaceIdNotice(err instanceof Error ? err.message : 'Could not enable Face ID.');
+      setFaceIdNotice(err instanceof Error ? err.message : 'Face ID:n käyttöönotto epäonnistui.');
     }
   };
 
   const handleRemoveFaceId = () => {
     clearEnrolledFaceId();
     setFaceIdEnrolled(false);
-    setFaceIdNotice('Face ID removed on this device. PIN remains active.');
+    setFaceIdNotice('Face ID poistettu tältä laitteelta. PIN-koodi on edelleen käytössä.');
   };
 
   const themeChoices: { id: ThemeMode; label: string; subtitle: string; bgPreview: string }[] = [
     {
       id: 'light',
-      label: 'Light',
-      subtitle: 'Crisp daylight surfaces',
+      label: 'Vaalea',
+      subtitle: 'Raikas päivänvaloteema',
       bgPreview: '#f4f7fb',
     },
     {
       id: 'dark',
-      label: 'Dark',
-      subtitle: 'Deep gym obsidian',
+      label: 'Tumma',
+      subtitle: 'Syvä salinmusta',
       bgPreview: '#090d16',
     },
     {
       id: 'pink',
-      label: 'Pink / Light Pink',
-      subtitle: 'Soft rose & blush glow',
+      label: 'Pinkki / Vaaleanpunainen',
+      subtitle: 'Pehmeä ruusunpunainen hehku',
       bgPreview: '#fff1f5',
     },
   ];
@@ -157,9 +157,9 @@ export function SettingsTab() {
         <div className="mb-3 flex items-center gap-2">
           <Users className="h-4 w-4" style={{ color: 'var(--accent-text)' }} />
           <div>
-            <h2 className="text-base font-extrabold">Switch Main User</h2>
+            <h2 className="text-base font-extrabold">Vaihda pääkäyttäjää</h2>
             <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-              Choose who owns this phone. Switching to Joel requires his PIN or Face ID.
+              Valitse kenen puhelin tämä on. Joelin tiliin vaihtaminen vaatii PIN-koodin tai Face ID:n.
             </p>
           </div>
         </div>
@@ -197,16 +197,16 @@ export function SettingsTab() {
                           }}
                         >
                           <ShieldCheck className="h-3 w-3" />
-                          Admin
+                          Ylläpitäjä
                         </span>
                       )}
                     </div>
                     <div className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
                       {isCurrent
-                        ? 'Active on this phone'
+                        ? 'Aktiivinen tässä puhelimessa'
                         : lifter.isAdmin
-                          ? 'Requires 4-digit PIN or Face ID'
-                          : 'Tap to switch'}
+                          ? 'Vaatii 4-numeroisen PIN-koodin tai Face ID:n'
+                          : 'Vaihda napauttamalla'}
                     </div>
                   </div>
                 </div>
@@ -228,13 +228,13 @@ export function SettingsTab() {
               <div className="flex items-center gap-2">
                 <ScanFace className="h-5 w-5" style={{ color: 'var(--accent-text)' }} />
                 <div>
-                  <div className="text-xs font-bold">iPhone Face ID for Joel</div>
+                  <div className="text-xs font-bold">iPhone Face ID Joelille</div>
                   <div className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
                     {faceIdEnrolled
-                      ? 'Enabled on this device for quick switching to Joel.'
+                      ? 'Käytössä tällä laitteella nopeaan vaihtoon Joelille.'
                       : faceIdSupported
-                        ? 'Allow Face ID alongside your 4-digit PIN on this device.'
-                        : 'Platform Face ID requires Safari / installed PWA on iPhone over HTTPS.'}
+                        ? 'Salli Face ID 4-numeroisen PIN-koodin rinnalla tällä laitteella.'
+                        : 'Face ID vaatii Safarin tai asennetun PWA-sovelluksen iPhonessa HTTPS-yhteydellä.'}
                   </div>
                 </div>
               </div>
@@ -246,7 +246,7 @@ export function SettingsTab() {
                   className="rounded-lg px-2.5 py-1.5 text-xs font-bold"
                   style={{ backgroundColor: 'var(--danger-soft)', color: 'var(--danger)' }}
                 >
-                  Remove
+                  Poista
                 </button>
               ) : (
                 <button
@@ -255,7 +255,7 @@ export function SettingsTab() {
                   onClick={handleEnrollFaceId}
                   className="bb-btn-primary px-3 py-1.5 text-xs"
                 >
-                  Enable Face ID
+                  Ota Face ID käyttöön
                 </button>
               )}
             </div>
@@ -273,9 +273,9 @@ export function SettingsTab() {
         <div className="flex items-center gap-2">
           <Palette className="h-4 w-4" style={{ color: 'var(--accent-text)' }} />
           <div>
-            <h2 className="text-base font-extrabold">Color Themes &amp; Borders</h2>
+            <h2 className="text-base font-extrabold">Väriteemat ja reunukset</h2>
             <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-              Switch between Light, Dark, and Pink themes plus widget border accents.
+              Vaihda vaalean, tumman ja pinkin teeman sekä korostusvärien välillä.
             </p>
           </div>
         </div>
@@ -286,9 +286,9 @@ export function SettingsTab() {
             className="mb-2 block text-xs font-bold uppercase tracking-wider"
             style={{ color: 'var(--text-muted)' }}
           >
-            App Theme
+            Sovelluksen teema
           </span>
-          <div className="grid grid-cols-3 gap-2" role="group" aria-label="Color theme">
+          <div className="grid grid-cols-3 gap-2" role="group" aria-label="Väriteema">
             {themeChoices.map((item) => {
               const active = theme === item.id;
               return (
@@ -323,22 +323,21 @@ export function SettingsTab() {
               className="text-xs font-bold uppercase tracking-wider"
               style={{ color: 'var(--text-muted)' }}
             >
-              Secondary App Color (Widget Borders &amp; Accents)
+              Korostusväri (korttien reunukset ja tehosteet)
             </span>
             <Sparkles className="h-3.5 w-3.5" style={{ color: 'var(--accent-text)' }} />
           </div>
 
           {theme === 'pink' ? (
             <p className="bb-subcard px-3 py-2.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
-              Pink / Light Pink theme uses soft rose borders automatically. Switch to{' '}
-              <strong>Light</strong> or <strong>Dark</strong> to apply your custom secondary border
-              color.
+              Pinkki / Vaaleanpunainen teema käyttää pehmeitä ruusunpunaisia reunuksia automaattisesti.
+              Vaihda <strong>Vaalea</strong>- tai <strong>Tumma</strong>-teemaan valitaksesi oman korostusvärin.
             </p>
           ) : (
             <div
               className="grid grid-cols-2 gap-2 sm:grid-cols-3"
               role="group"
-              aria-label="Secondary app color"
+              aria-label="Sovelluksen korostusväri"
             >
               {SECONDARY_ACCENT_OPTIONS.map((opt) => {
                 const active = accent === opt.id;
@@ -370,9 +369,9 @@ export function SettingsTab() {
         <div className="flex items-center gap-2">
           <UserPlus className="h-4 w-4" style={{ color: 'var(--accent-text)' }} />
           <div>
-            <h2 className="text-base font-extrabold">Manage Users</h2>
+            <h2 className="text-base font-extrabold">Hallitse käyttäjiä</h2>
             <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-              Anyone can add a new gym buddy. Only Joel can delete users.
+              Kuka tahansa voi lisätä uuden treenikaverin. Vain Joel voi poistaa käyttäjiä.
             </p>
           </div>
         </div>
@@ -383,8 +382,8 @@ export function SettingsTab() {
               type="text"
               value={newUserName}
               onChange={(e) => setNewUserName(e.target.value)}
-              placeholder="New user name (e.g. Alex)"
-              aria-label="New user name"
+              placeholder="Uuden käyttäjän nimi (esim. Alex)"
+              aria-label="Uuden käyttäjän nimi"
               className="bb-input flex-1 px-3 py-2 text-sm"
             />
             <button
@@ -392,19 +391,19 @@ export function SettingsTab() {
               disabled={!newUserName.trim()}
               className="bb-btn-primary px-4 py-2 text-xs"
             >
-              Add User
+              Lisää käyttäjä
             </button>
           </div>
 
           <div className="flex items-center gap-1.5">
             <span className="mr-1 text-[11px] font-semibold" style={{ color: 'var(--text-muted)' }}>
-              Badge color:
+              Tunnusväri:
             </span>
             {AVATAR_COLOR_SWATCHES.map((hex) => (
               <button
                 key={hex}
                 type="button"
-                aria-label={`Select badge color ${hex}`}
+                aria-label={`Valitse tunnusväri ${hex}`}
                 onClick={() => setNewUserColor(hex)}
                 className="h-5 w-5 rounded-full transition"
                 style={{
@@ -450,7 +449,7 @@ export function SettingsTab() {
                   <span className="text-sm font-bold">{lifter.name}</span>
                   {lifter.isAdmin && (
                     <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-                      (Admin)
+                      (Ylläpitäjä)
                     </span>
                   )}
                 </div>
@@ -462,25 +461,25 @@ export function SettingsTab() {
                         <button
                           type="button"
                           onClick={() => void handleDeleteUser(lifter.id)}
-                          aria-label={`Confirm delete user ${lifter.name}`}
+                          aria-label={`Vahvista käyttäjän ${lifter.name} poisto`}
                           className="rounded-lg px-2.5 py-1 text-xs font-bold text-white"
                           style={{ backgroundColor: 'var(--danger)' }}
                         >
-                          Confirm
+                          Vahvista
                         </button>
                         <button
                           type="button"
                           onClick={() => setConfirmDeleteLifterId(null)}
                           className="bb-pill-idle rounded-lg px-2 py-1 text-xs"
                         >
-                          Cancel
+                          Peruuta
                         </button>
                       </div>
                     ) : (
                       <button
                         type="button"
                         onClick={() => setConfirmDeleteLifterId(lifter.id)}
-                        aria-label={`Delete user ${lifter.name}`}
+                        aria-label={`Poista käyttäjä ${lifter.name}`}
                         className="rounded-lg p-1.5 transition hover:opacity-80"
                         style={{ color: 'var(--danger)' }}
                       >
@@ -500,9 +499,9 @@ export function SettingsTab() {
         <div className="flex items-center gap-2">
           <Dumbbell className="h-4 w-4" style={{ color: 'var(--accent-text)' }} />
           <div>
-            <h2 className="text-base font-extrabold">Manage Exercises</h2>
+            <h2 className="text-base font-extrabold">Hallitse liikkeitä</h2>
             <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-              Anyone can add new exercises. Only Joel can remove them.
+              Kuka tahansa voi lisätä uusia liikkeitä. Vain Joel voi poistaa niitä.
             </p>
           </div>
         </div>
@@ -513,21 +512,21 @@ export function SettingsTab() {
               type="text"
               value={newExerciseName}
               onChange={(e) => setNewExerciseName(e.target.value)}
-              placeholder="Exercise name (e.g. Barbell Row)"
-              aria-label="Manage new exercise name"
+              placeholder="Liikkeen nimi (esim. Kulmasoutu)"
+              aria-label="Hallittavan uuden liikkeen nimi"
               className="bb-input flex-1 px-3 py-2 text-sm"
             />
             <select
               value={newExerciseCategory}
               onChange={(e) => setNewExerciseCategory(e.target.value as ExerciseCategory)}
-              aria-label="Manage new exercise category"
+              aria-label="Hallittavan uuden liikkeen kategoria"
               className="bb-input px-3 py-2 text-sm"
             >
-              <option value="barbell">Barbell (kg)</option>
-              <option value="dumbbell">Dumbbell (kg / DB)</option>
-              <option value="machine">Machine / Cable (kg)</option>
-              <option value="bodyweight">Bodyweight (reps)</option>
-              <option value="pullup">Pull-up modes</option>
+              <option value="barbell">Levytanko (kg)</option>
+              <option value="dumbbell">Käsipaino (kg / kp)</option>
+              <option value="machine">Laite / Talja (kg)</option>
+              <option value="bodyweight">Kehonpaino (toistot)</option>
+              <option value="pullup">Leuanveto (Kuminauha / KP / +kg)</option>
             </select>
           </div>
           <button
@@ -535,7 +534,7 @@ export function SettingsTab() {
             disabled={!newExerciseName.trim()}
             className="bb-btn-primary w-full py-2.5 text-xs"
           >
-            Add Exercise
+            Lisää liike
           </button>
         </form>
 
@@ -552,6 +551,17 @@ export function SettingsTab() {
         <div className="space-y-1.5 pt-1">
           {snapshot.exercises.map((ex) => {
             const isConfirming = confirmDeleteExerciseId === ex.id;
+            const categoryLabel =
+              ex.category === 'pullup'
+                ? 'Kuminauha / Kehonpaino / +kg'
+                : ex.category === 'dumbbell'
+                  ? 'Käsipaino (kg / kp)'
+                  : ex.category === 'barbell'
+                    ? 'Levytanko (kg)'
+                    : ex.category === 'machine'
+                      ? 'Laite / Talja (kg)'
+                      : 'Kehonpaino (toistot)';
+
             return (
               <div
                 key={ex.id}
@@ -559,12 +569,8 @@ export function SettingsTab() {
               >
                 <div>
                   <div className="text-sm font-bold">{ex.name}</div>
-                  <div className="text-[11px] capitalize" style={{ color: 'var(--text-muted)' }}>
-                    {ex.category === 'pullup'
-                      ? 'Assisted / Bodyweight / +kg'
-                      : ex.category === 'dumbbell'
-                        ? 'Dumbbell (kg / DB)'
-                        : `${ex.category} (${ex.category === 'bodyweight' ? 'reps' : 'kg'})`}
+                  <div className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                    {categoryLabel}
                   </div>
                 </div>
 
@@ -575,25 +581,25 @@ export function SettingsTab() {
                         <button
                           type="button"
                           onClick={() => void handleDeleteExercise(ex.id)}
-                          aria-label={`Confirm remove exercise ${ex.name}`}
+                          aria-label={`Vahvista liikkeen ${ex.name} poisto`}
                           className="rounded-lg px-2.5 py-1 text-xs font-bold text-white"
                           style={{ backgroundColor: 'var(--danger)' }}
                         >
-                          Confirm
+                          Vahvista
                         </button>
                         <button
                           type="button"
                           onClick={() => setConfirmDeleteExerciseId(null)}
                           className="bb-pill-idle rounded-lg px-2 py-1 text-xs"
                         >
-                          Cancel
+                          Peruuta
                         </button>
                       </div>
                     ) : (
                       <button
                         type="button"
                         onClick={() => setConfirmDeleteExerciseId(ex.id)}
-                        aria-label={`Remove exercise ${ex.name}`}
+                        aria-label={`Poista liike ${ex.name}`}
                         className="rounded-lg p-1.5 transition hover:opacity-80"
                         style={{ color: 'var(--danger)' }}
                       >
@@ -612,12 +618,12 @@ export function SettingsTab() {
       <section className="bb-widget flex items-center justify-between p-4">
         <div>
           <div className="text-xs font-extrabold uppercase tracking-wider">
-            {snapshot.mode === 'supabase' ? 'Supabase Cloud Realtime' : 'Local Realtime Store'}
+            {snapshot.mode === 'supabase' ? 'Supabase-pilvisynkronointi' : 'Paikallinen reaaliaikatila'}
           </div>
           <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
             {snapshot.mode === 'supabase'
-              ? 'Synced across all crew phones via Postgres Realtime.'
-              : 'Synced instantly across browser tabs; configure Supabase env vars for cloud sync.'}
+              ? 'Synkronoituu kaikkien treenikaverien puhelimiin Postgres Realtimen kautta.'
+              : 'Synkronoituu välittömästi välilehtien välillä; lisää Supabase-asetukset pilvisynkronointia varten.'}
           </p>
         </div>
 
@@ -625,11 +631,11 @@ export function SettingsTab() {
           <button
             type="button"
             onClick={() => void store.refresh()}
-            aria-label="Force sync now"
+            aria-label="Synkronoi nyt"
             className="bb-pill-idle flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold"
           >
             <RefreshCw className="h-3.5 w-3.5" />
-            <span>Sync</span>
+            <span>Päivitä</span>
           </button>
 
           {snapshot.mode === 'supabase' && store.signOutCrew && (
@@ -639,7 +645,7 @@ export function SettingsTab() {
               className="rounded-xl px-3 py-2 text-xs font-bold"
               style={{ backgroundColor: 'var(--danger-soft)', color: 'var(--danger)' }}
             >
-              Sign Out
+              Kirjaudu ulos
             </button>
           )}
         </div>

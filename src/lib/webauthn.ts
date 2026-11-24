@@ -87,10 +87,10 @@ export function clearEnrolledFaceId(): void {
  */
 export async function enrollFaceIdForAdmin(adminLifter: Lifter): Promise<void> {
   if (!adminLifter.isAdmin) {
-    throw new Error('Only the admin user (Joel) can enroll Face ID.');
+    throw new Error('Vain ylläpitäjä (Joel) voi ottaa Face ID:n käyttöön.');
   }
   if (typeof navigator === 'undefined' || !navigator.credentials?.create) {
-    throw new Error('Face ID / WebAuthn is not supported in this browser.');
+    throw new Error('Face ID / WebAuthn ei ole tuettu tässä selaimessa.');
   }
 
   const userIdBuffer = new ArrayBuffer(adminLifter.id.length);
@@ -108,7 +108,7 @@ export async function enrollFaceIdForAdmin(adminLifter: Lifter): Promise<void> {
       user: {
         id: userIdBytes,
         name: `${adminLifter.name.toLowerCase()}@barbell-buddy.local`,
-        displayName: `${adminLifter.name} (Admin)`,
+        displayName: `${adminLifter.name} (Ylläpitäjä)`,
       },
       pubKeyCredParams: [
         { alg: -7, type: 'public-key' }, // ES256 (Apple Secure Enclave / Face ID native)
@@ -125,7 +125,7 @@ export async function enrollFaceIdForAdmin(adminLifter: Lifter): Promise<void> {
   })) as PublicKeyCredential | null;
 
   if (!credential?.rawId) {
-    throw new Error('Face ID enrollment was cancelled.');
+    throw new Error('Face ID:n käyttöönotto peruutettiin.');
   }
 
   const stored: StoredFaceIdCredential = {
@@ -140,10 +140,10 @@ export async function enrollFaceIdForAdmin(adminLifter: Lifter): Promise<void> {
 export async function verifyFaceIdForAdmin(adminLifterId?: string): Promise<boolean> {
   const enrolled = getEnrolledFaceIdCredential(adminLifterId);
   if (!enrolled) {
-    throw new Error('Face ID is not enrolled on this device yet.');
+    throw new Error('Face ID:tä ei ole vielä otettu käyttöön tällä laitteella.');
   }
   if (typeof navigator === 'undefined' || !navigator.credentials?.get) {
-    throw new Error('Face ID / WebAuthn is not available.');
+    throw new Error('Face ID / WebAuthn ei ole käytettävissä.');
   }
 
   const assertion = (await navigator.credentials.get({

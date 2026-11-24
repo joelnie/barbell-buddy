@@ -26,10 +26,10 @@ export function OnboardingModal() {
             <Dumbbell className="h-6 w-6" />
           </div>
           <h2 id="onboarding-title" className="text-xl font-extrabold">
-            Who&apos;s using this phone?
+            Kuka käyttää tätä puhelinta?
           </h2>
           <p className="mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>
-            Choose your main profile for this device. You can switch anytime in Settings.
+            Valitse laitteen pääkäyttäjä. Voit vaihtaa käyttäjää milloin tahansa Asetuksissa.
           </p>
         </div>
 
@@ -60,12 +60,12 @@ export function OnboardingModal() {
                           color: 'var(--accent-text)',
                         }}
                       >
-                        Admin
+                        Ylläpitäjä
                       </span>
                     )}
                   </div>
                   <div className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-                    {lifter.isAdmin ? 'PIN or Face ID required' : 'Tap to continue'}
+                    {lifter.isAdmin ? 'PIN-koodi tai Face ID vaaditaan' : 'Jatka napauttamalla'}
                   </div>
                 </div>
               </div>

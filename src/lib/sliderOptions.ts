@@ -1,4 +1,9 @@
 import type { Exercise, PullupMode, WorkoutSet } from '../types/models';
+import {
+  isBenchPressExercise,
+  isDeadliftExercise,
+  isSquatExercise,
+} from './finnish';
 import { formatWeightNumber } from './metrics';
 
 export type RawWeightOption = 'Assisted' | 'Bodyweight' | number;
@@ -53,9 +58,9 @@ export function getRepsSliderStops(): SliderStop[] {
     key: `rep-${rep}`,
     rawValue: rep,
     primaryLabel: String(rep),
-    secondaryLabel: rep === 1 ? 'rep' : 'reps',
+    secondaryLabel: rep === 1 ? 'toisto' : 'toistoa',
     tickLabel: String(rep),
-    ariaValueText: `${rep} ${rep === 1 ? 'rep' : 'reps'}`,
+    ariaValueText: `${rep} ${rep === 1 ? 'toisto' : 'toistoa'}`,
   }));
 }
 
@@ -72,17 +77,15 @@ export function getRawWeightOptionsForExercise(exercise: Exercise): readonly Raw
     return ['Bodyweight'];
   }
 
-  const normalizedName = exercise.name.trim().toLowerCase();
-
-  if (exercise.id === 'ex-bench-press' || normalizedName === 'bench press') {
+  if (isBenchPressExercise(exercise)) {
     return BENCH_PRESS_RAW_WEIGHT_OPTIONS;
   }
 
-  if (exercise.id === 'ex-squat' || normalizedName === 'squat') {
+  if (isSquatExercise(exercise)) {
     return SQUAT_RAW_WEIGHT_OPTIONS;
   }
 
-  if (exercise.id === 'ex-deadlift' || normalizedName === 'deadlift') {
+  if (isDeadliftExercise(exercise)) {
     return DEADLIFT_RAW_WEIGHT_OPTIONS;
   }
 
@@ -101,10 +104,10 @@ export function getWeightSliderStopsForExercise(exercise: Exercise): SliderStop[
       return {
         key: 'assisted',
         rawValue: 'Assisted',
-        primaryLabel: 'Assisted',
-        secondaryLabel: 'reps only',
-        tickLabel: 'Asst',
-        ariaValueText: 'Assisted',
+        primaryLabel: 'Kuminauha',
+        secondaryLabel: 'vain toistot',
+        tickLabel: 'Kumi',
+        ariaValueText: 'Kuminauha',
       };
     }
 
@@ -112,10 +115,10 @@ export function getWeightSliderStopsForExercise(exercise: Exercise): SliderStop[
       return {
         key: 'bodyweight',
         rawValue: 'Bodyweight',
-        primaryLabel: 'Bodyweight',
-        secondaryLabel: 'reps only',
-        tickLabel: 'BW',
-        ariaValueText: 'Bodyweight',
+        primaryLabel: 'Kehonpaino',
+        secondaryLabel: 'vain toistot',
+        tickLabel: 'KP',
+        ariaValueText: 'Kehonpaino',
       };
     }
 
@@ -126,7 +129,7 @@ export function getWeightSliderStopsForExercise(exercise: Exercise): SliderStop[
         key: `plus-${formatted}`,
         rawValue: opt,
         primaryLabel: `+${formatted}`,
-        secondaryLabel: 'kg added',
+        secondaryLabel: 'kg lisäpaino',
         tickLabel: `+${formatted}`,
         ariaValueText: `+${formatted} kg`,
       };
@@ -137,9 +140,9 @@ export function getWeightSliderStopsForExercise(exercise: Exercise): SliderStop[
         key: `db-${formatted}`,
         rawValue: opt,
         primaryLabel: formatted,
-        secondaryLabel: 'kg / DB',
+        secondaryLabel: 'kg / kp',
         tickLabel: `${formatted}`,
-        ariaValueText: `${formatted} kg per dumbbell`,
+        ariaValueText: `${formatted} kg per käsipaino`,
       };
     }
 
@@ -235,17 +238,16 @@ export function resolveInitialWeightIndex(
     return findNearestNumericStopIndex(stops, lastSet.weightKg);
   }
 
-  const normalizedName = exercise.name.trim().toLowerCase();
   let defaultKg = 40;
   if (exercise.category === 'dumbbell') {
     defaultKg = 18;
   } else if (exercise.category === 'machine') {
     defaultKg = 35;
-  } else if (exercise.id === 'ex-deadlift' || normalizedName === 'deadlift') {
+  } else if (isDeadliftExercise(exercise)) {
     defaultKg = 80;
-  } else if (exercise.id === 'ex-squat' || normalizedName === 'squat') {
+  } else if (isSquatExercise(exercise)) {
     defaultKg = 60;
-  } else if (exercise.id === 'ex-bench-press' || normalizedName === 'bench press') {
+  } else if (isBenchPressExercise(exercise)) {
     defaultKg = 60;
   }
 
