@@ -31,7 +31,6 @@ interface AppContextValue {
   requestSwitchMainUser: (lifter: Lifter) => void;
   cancelAdminUnlock: () => void;
   completeAdminUnlockWithPin: (pin: string) => Promise<boolean>;
-  completeAdminUnlockWithFaceId: () => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -191,12 +190,6 @@ export function AppProvider({
     [pendingAdminTarget, store, commitMainUser],
   );
 
-  const completeAdminUnlockWithFaceId = useCallback(() => {
-    if (!pendingAdminTarget) return;
-    commitMainUser(pendingAdminTarget.id);
-    setPendingAdminTarget(null);
-  }, [pendingAdminTarget, commitMainUser]);
-
   const activeSessionForMainUser = useMemo(() => {
     if (!mainUser) return null;
     const now = new Date();
@@ -224,7 +217,6 @@ export function AppProvider({
       requestSwitchMainUser,
       cancelAdminUnlock,
       completeAdminUnlockWithPin,
-      completeAdminUnlockWithFaceId,
     }),
     [
       store,
@@ -237,7 +229,6 @@ export function AppProvider({
       requestSwitchMainUser,
       cancelAdminUnlock,
       completeAdminUnlockWithPin,
-      completeAdminUnlockWithFaceId,
     ],
   );
 

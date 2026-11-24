@@ -8,28 +8,28 @@
 
 ## Features
 
-- **Starter Crew & Open Progress**: Comes ready with **Julie**, **Joel** (Admin), and **Leevi**, plus support for adding new lifters anytime. Everyone can view historical sessions and strength curves, and partners in the same workout can log sets for one another.
+- **Starter Crew & Open Progress**: Comes ready with **Julie** (pink), **Joel** (Admin), **Leevi**, and **Tuomas**, plus support for adding new lifters anytime. Everyone can view historical sessions and strength curves, and partners in the same workout can log sets for one another.
 - **100 % suomenkielinen käyttöliittymä & vaihtuvat treenilauseet**:
   - Koko sovellus on suomeksi (`Treeni`, `Historia`, `Kehitys`, `Asetukset`) ja tukee myös aiemmin luotuja englanninkielisiä Supabase-liikerivejä automaattisesti.
   - Aloitusnäkymässä vaihtuu 22 motivoivaa suomenkielistä treenilausetta (mukaan lukien käyttäjän nimellä personoidut tervehdykset).
 - **Starter & Custom Exercises with Dual Vertical Sliders**:
-  - **Left Vertical Slider**: **Toistot** (`1`–`30`) with smooth touch scrubbing and `+` / `−` precision steppers.
-  - **Right Vertical Slider**: Exercise-tailored discrete weight stops — **Leuanveto** (`Kuminauha`, `Kehonpaino`, `+2.5` to `+30 kg`, never negative weight), **Penkkipunnerrus** (`20`–`120 kg` by `2.5`), **Kyykky** (`20`–`150 kg` by `2.5`), **Maastaveto** (`25`–`180 kg` by `2.5`), **Vinopenkki käsipainoilla** (`8, 9, 10, 12, …, 40 kg / kp`), plus custom exercises added in-app.
+  - **Left Vertical Slider**: **Toistot** (`1`–`20`) with smooth wheel scrolling and `+` / `−` precision steppers.
+  - **Right Vertical Slider**: Exercise-tailored discrete weight stops — **Leuanveto** (`Kuminauha`, `Kehonpaino`, `+2.5` to `+30 kg`, never negative weight), **Penkkipunnerrus** (`20`–`120 kg` by `2.5`), **Kyykky** (`20`–`150 kg` by `2.5`), **Maastaveto** (`25`–`180 kg` by `2.5`), **Vinopenkki käsipainoilla** (`Paino (x2)`, `8, 9, 10, 12, …, 40 kg`), plus custom exercises added in-app.
 - **Participant-Scoped Live Sessions & Parallel Workouts**:
   - Sessions are named by date (`YYYY-MM-DD`).
-  - Tap **New Session** and select who is lifting together. Only selected participants see and log into that live session on Tab 1—allowing other lifters to run separate sessions on the very same day.
-  - Tap **End Session** when finished, or let Barbell Buddy **auto-save and finalize the session at `23:59`** local time automatically.
+  - Tap **Uusi treeni** and select who is lifting together. Only selected participants see and log into that live session on Tab 1—allowing other lifters to run separate sessions on the very same day.
+  - Tap **Lopeta treeni** when finished, or let Barbell Buddy **auto-save and finalize the session at `23:59`** local time automatically.
 - **4-Tab Mobile Experience**:
-  1. **Session**: Start a session, switch between session partners in 1 tap, and log/edit sets live.
-  2. **History**: Browse all previous sessions and tap any session to inspect every exercise, set, rep, and weight.
-  3. **Progress**: Multi-lifter SVG progression charts (Top Weight, Estimated 1RM, and Pull-up mode breakdowns) + Personal Record cards.
-  4. **Settings**: Switch Main User, customize themes & secondary widget border colors, and manage users and exercises.
-- **Admin PIN & iPhone Face ID**:
-  - Switching Main User to **Joel** requires his 4-digit admin PIN or **iPhone Face ID** (via WebAuthn platform authenticator).
+  1. **Treeni**: Start a session, switch between session partners in 1 tap, and log/edit sets live.
+  2. **Historia**: Browse all previous sessions, tap any session to inspect every exercise, set, rep, and weight, or delete old sessions with an `"Oletko varma?"` confirmation.
+  3. **Kehitys**: Multi-lifter SVG progression charts (Top Weight, Estimated 1RM, and Pull-up mode breakdowns) + Personal Record cards.
+  4. **Asetukset**: Switch Main User, customize themes & secondary widget border colors, and manage users and exercises.
+- **Admin PIN**:
+  - Switching Main User to **Joel** requires his 4-digit admin PIN.
   - Anyone can add new users or exercises; **only Joel** can delete users or remove exercises.
 - **Themes & Secondary App Colors**:
-  - Choose between **Light**, **Dark**, and **Pink / Light Pink** themes.
-  - In **Light** and **Dark** themes, customize the **Secondary App Color** for widget borders and active highlights (**Neon Green**, **Turquoise**, **Bright Orange**, **Electric Blue**, **Vivid Purple**).
+  - Choose between **Vaalea**, **Tumma**, and **Pinkki** themes.
+  - In **Vaalea** and **Tumma** themes, customize **Korostusväri** for widget borders and active highlights (**Neonvihreä**, **Turkoosi**, **Kirkkaanoranssi**, **Sähkönsininen**, **Kirkkaanvioletti**).
 
 ---
 
@@ -84,11 +84,10 @@ npm run build       # Production PWA build into dist/
 
 ## Installing on Mobile
 
-### iPhone (iOS Safari + Face ID)
+### iPhone (iOS Safari)
 1. Open your GitHub Pages URL in **Safari** on iPhone.
 2. Tap the **Share** button (square with upward arrow) → **Add to Home Screen** → **Add**.
 3. Launch **Barbell Buddy** from your Home Screen.
-4. To enable **Face ID** for Joel: switch Main User to **Joel** using his 4-digit PIN once, then tap **Enable Face ID** in **Settings → Switch Main User**.
 
 ### Android (Chrome)
 1. Open your GitHub Pages URL in **Chrome**.

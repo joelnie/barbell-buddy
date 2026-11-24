@@ -24,6 +24,7 @@ interface PersistedLocalData {
   exercises: Exercise[];
   sessions: WorkoutSession[];
   sets: WorkoutSet[];
+  migratedV2?: boolean;
 }
 
 function generateId(prefix: string): string {
@@ -39,6 +40,7 @@ function createInitialPersistedData(): PersistedLocalData {
     exercises: STARTER_EXERCISES.map((e) => ({ ...e })),
     sessions: [],
     sets: [],
+    migratedV2: true,
   };
 }
 
@@ -73,15 +75,45 @@ export class LocalRealtimeStore implements DataStore {
         return seeded;
       }
       const parsed = JSON.parse(raw) as Partial<PersistedLocalData>;
-      return {
-        lifters: Array.isArray(parsed.lifters) && parsed.lifters.length > 0 ? parsed.lifters : createInitialPersistedData().lifters,
+      let lifters =
+        Array.isArray(parsed.lifters) && parsed.lifters.length > 0
+          ? parsed.lifters.map((l) =>
+              l.name.trim().toLowerCase() === 'julie' && l.avatarColor === '#f43f5e'
+                ? { ...l, avatarColor: '#ec4899' }
+                : l,
+            )
+          : createInitialPersistedData().lifters;
+
+      let migratedV2 = Boolean(parsed.migratedV2);
+      let didMigrate = false;
+
+      if (!migratedV2) {
+        if (!lifters.some((l) => l.name.trim().toLowerCase() === 'tuomas')) {
+          const tuomasSeed = STARTER_LIFTERS.find((l) => l.id === 'lifter-tuomas');
+          if (tuomasSeed) {
+            lifters = [...lifters, { ...tuomasSeed }];
+          }
+        }
+        migratedV2 = true;
+        didMigrate = true;
+      }
+
+      const normalizedData: PersistedLocalData = {
+        lifters,
         exercises:
           Array.isArray(parsed.exercises) && parsed.exercises.length > 0
             ? parsed.exercises
             : createInitialPersistedData().exercises,
         sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
         sets: Array.isArray(parsed.sets) ? parsed.sets : [],
+        migratedV2,
       };
+
+      if (didMigrate) {
+        localStorage.setItem(this.storageKey, JSON.stringify(normalizedData));
+      }
+
+      return normalizedData;
     } catch {
       return createInitialPersistedData();
     }
@@ -293,6 +325,19 @@ export class LocalRealtimeStore implements DataStore {
     this.persistAndBroadcast({
       ...data,
       sessions: updatedSessions,
+    });
+  }
+
+  async deleteSession(sessionId: string): Promise<void> {
+    const data = this.readFromStorage();
+    if (!data.sessions.some((s) => s.id === sessionId)) {
+      throw new Error('Treeniä ei löytynyt.');
+    }
+
+    this.persistAndBroadcast({
+      ...data,
+      sessions: data.sessions.filter((s) => s.id !== sessionId),
+      sets: data.sets.filter((s) => s.sessionId !== sessionId),
     });
   }
 

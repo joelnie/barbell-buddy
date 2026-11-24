@@ -62,7 +62,7 @@ create table if not exists public.workout_sets (
   exercise_id uuid not null references public.exercises(id) on delete cascade,
   pullup_mode text check (pullup_mode in ('assisted', 'bodyweight', 'weighted')),
   weight_kg numeric(6,2),
-  reps int not null check (reps > 0 and reps <= 999),
+  reps int not null check (reps > 0 and reps <= 20),
   logged_by uuid references public.lifters(id) on delete set null,
   created_at timestamptz not null default now(),
   constraint valid_pullup_weight check (
@@ -76,15 +76,18 @@ create index if not exists idx_workout_sets_session on public.workout_sets(sessi
 create index if not exists idx_workout_sets_lifter_exercise on public.workout_sets(lifter_id, exercise_id, created_at desc);
 
 -- =============================================================================
--- Seed Data: Julie, Joel (Admin), Leevi + 5 Starter Exercises + Salted PIN Hash
+-- Seed Data: Julie, Joel (Admin), Leevi, Tuomas + 5 Starter Exercises + PIN Hash
 -- =============================================================================
 
 insert into public.lifters (name, avatar_color, is_admin)
 values
-  ('Julie', '#f43f5e', false),
+  ('Julie', '#ec4899', false),
   ('Joel', '#10b981', true),
-  ('Leevi', '#3b82f6', false)
-on conflict (name) do nothing;
+  ('Leevi', '#3b82f6', false),
+  ('Tuomas', '#f59e0b', false)
+on conflict (name) do update
+  set avatar_color = excluded.avatar_color
+  where public.lifters.name = 'Julie';
 
 insert into public.admin_config (id, pin_hash)
 values (1, '$2a$10$cWJRkj1RiRAB2at9tyuMMeLSuRFJvMdlfYw9kOuBGUDvLoY8KvJB.')
@@ -119,6 +122,10 @@ drop policy if exists "lifters_insert_authenticated" on public.lifters;
 create policy "lifters_insert_authenticated" on public.lifters
   for insert to authenticated with check (is_admin = false);
 
+drop policy if exists "lifters_update_authenticated" on public.lifters;
+create policy "lifters_update_authenticated" on public.lifters
+  for update to authenticated using (true) with check (is_admin = false);
+
 -- Exercises: everyone authenticated can read and add; deletion only via admin RPC
 drop policy if exists "exercises_select_authenticated" on public.exercises;
 create policy "exercises_select_authenticated" on public.exercises
@@ -140,6 +147,10 @@ create policy "sessions_insert_authenticated" on public.workout_sessions
 drop policy if exists "sessions_update_authenticated" on public.workout_sessions;
 create policy "sessions_update_authenticated" on public.workout_sessions
   for update to authenticated using (true) with check (true);
+
+drop policy if exists "sessions_delete_authenticated" on public.workout_sessions;
+create policy "sessions_delete_authenticated" on public.workout_sessions
+  for delete to authenticated using (true);
 
 -- Session Participants
 drop policy if exists "participants_select_authenticated" on public.session_participants;

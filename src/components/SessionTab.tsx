@@ -16,6 +16,7 @@ import { useApp } from '../context/AppContext';
 import { formatLocalDate, isSessionActiveAt } from '../lib/dates';
 import {
   formatHeroPhrase,
+  isInclineDumbbellBenchExercise,
   pickRandomHeroPhraseTemplate,
 } from '../lib/finnish';
 import {
@@ -38,7 +39,7 @@ import type {
 import { VerticalDiscreteSlider } from './VerticalDiscreteSlider';
 
 export function SessionTab() {
-  const { store, snapshot, mainUser, activeSessionForMainUser, completedSessions } = useApp();
+  const { store, snapshot, mainUser, activeSessionForMainUser } = useApp();
 
   const [showNewSessionPicker, setShowNewSessionPicker] = useState(false);
   const [selectedParticipantIds, setSelectedParticipantIds] = useState<string[]>([]);
@@ -272,12 +273,6 @@ export function SessionTab() {
     [snapshot.exercises],
   );
 
-  // Completed sessions today for context when idle
-  const todaysCompletedCount = useMemo(
-    () => completedSessions.filter((s) => s.sessionDate === todayStr).length,
-    [completedSessions, todayStr],
-  );
-
   if (!mainUser) {
     return null;
   }
@@ -323,18 +318,13 @@ export function SessionTab() {
               </button>
 
               <div
-                className="flex items-center justify-between text-xs"
+                className="flex items-center text-xs"
                 style={{ color: 'var(--text-muted)' }}
               >
                 <span className="flex items-center gap-1">
-                  <Clock className="h-3.5 w-3.5" />
+                  <Clock className="h-3.5 w-3.5 shrink-0" />
                   Tallentuu automaattisesti klo 23.59, jos treeniä ei lopeteta
                 </span>
-                {todaysCompletedCount > 0 && (
-                  <span>
-                    {todaysCompletedCount} valmista tänään
-                  </span>
-                )}
               </div>
             </div>
           ) : (
@@ -588,7 +578,11 @@ export function SessionTab() {
                 </span>
               )}
             </div>
-            <div className="grid grid-cols-3 gap-2">
+            <div
+              className={`grid gap-2 ${
+                sessionParticipants.length === 3 ? 'grid-cols-3' : 'grid-cols-2'
+              }`}
+            >
               {sessionParticipants.map((p) => {
                 const isSelected = p.id === selectedLifterId;
                 return (
@@ -702,7 +696,11 @@ export function SessionTab() {
 
             <VerticalDiscreteSlider
               id="set-weight-slider"
-              label="Paino"
+              label={
+                selectedExercise && isInclineDumbbellBenchExercise(selectedExercise)
+                  ? 'Paino (x2)'
+                  : 'Paino'
+              }
               stops={weightStops}
               selectedIndex={weightIndex}
               onSelectIndex={setWeightIndex}
@@ -825,7 +823,7 @@ export function SessionTab() {
                               <input
                                 type="number"
                                 min="1"
-                                max="999"
+                                max="20"
                                 aria-label="Muokkaa toistoja"
                                 value={editRepsInput}
                                 onChange={(e) => setEditRepsInput(e.target.value)}

@@ -220,13 +220,51 @@ export class SupabaseRealtimeStore implements DataStore {
       participantsBySession.set(row.session_id, list);
     }
 
-    const lifters: Lifter[] = ((liftersRes.data ?? []) as LifterRow[]).map((r) => ({
-      id: r.id,
-      name: r.name,
-      avatarColor: r.avatar_color,
-      isAdmin: r.is_admin,
-      createdAt: r.created_at,
-    }));
+    const rawLifters = (liftersRes.data ?? []) as LifterRow[];
+    const lifters: Lifter[] = rawLifters.map((r) => {
+      const isLegacyJulieColor =
+        r.name.trim().toLowerCase() === 'julie' && r.avatar_color === '#f43f5e';
+      if (isLegacyJulieColor) {
+        void this.client.from('lifters').update({ avatar_color: '#ec4899' }).eq('id', r.id);
+      }
+      return {
+        id: r.id,
+        name: r.name,
+        avatarColor: isLegacyJulieColor ? '#ec4899' : r.avatar_color,
+        isAdmin: r.is_admin,
+        createdAt: r.created_at,
+      };
+    });
+
+    // Auto-seed starter lifter Tuomas once for existing cloud projects
+    try {
+      const tuomasSeedKey = 'bb_supabase_tuomas_seeded_v1';
+      if (
+        lifters.length > 0 &&
+        !lifters.some((l) => l.name.trim().toLowerCase() === 'tuomas') &&
+        typeof localStorage !== 'undefined' &&
+        !localStorage.getItem(tuomasSeedKey)
+      ) {
+        localStorage.setItem(tuomasSeedKey, '1');
+        const { data: createdTuomas } = await this.client
+          .from('lifters')
+          .insert({ name: 'Tuomas', avatar_color: '#f59e0b', is_admin: false })
+          .select('*')
+          .single();
+        if (createdTuomas) {
+          const t = createdTuomas as LifterRow;
+          lifters.push({
+            id: t.id,
+            name: t.name,
+            avatarColor: t.avatar_color,
+            isAdmin: t.is_admin,
+            createdAt: t.created_at,
+          });
+        }
+      }
+    } catch {
+      // Ignore duplicate/offline seed errors
+    }
 
     const exercises: Exercise[] = ((exercisesRes.data ?? []) as ExerciseRow[]).map((r) => ({
       id: r.id,
@@ -237,16 +275,18 @@ export class SupabaseRealtimeStore implements DataStore {
       createdAt: r.created_at,
     }));
 
-    const sessions: WorkoutSession[] = ((sessionsRes.data ?? []) as SessionRow[]).map((r) => ({
-      id: r.id,
-      sessionDate: r.session_date,
-      status: r.status,
-      createdBy: r.created_by,
-      participantIds: participantsBySession.get(r.id) ?? [],
-      startedAt: r.started_at,
-      endedAt: r.ended_at,
-      expiresAt: r.expires_at,
-    }));
+    const sessions: WorkoutSession[] = ((sessionsRes.data ?? []) as SessionRow[])
+      .filter((r) => r.session_date !== '__deleted__')
+      .map((r) => ({
+        id: r.id,
+        sessionDate: r.session_date,
+        status: r.status,
+        createdBy: r.created_by,
+        participantIds: participantsBySession.get(r.id) ?? [],
+        startedAt: r.started_at,
+        endedAt: r.ended_at,
+        expiresAt: r.expires_at,
+      }));
 
     const sets: WorkoutSet[] = ((setsRes.data ?? []) as SetRow[]).map((r) => ({
       id: r.id,
@@ -393,6 +433,33 @@ export class SupabaseRealtimeStore implements DataStore {
       .eq('id', sessionId);
     if (error) throw new Error(error.message);
     await this.refresh(now);
+  }
+
+  async deleteSession(sessionId: string): Promise<void> {
+    const { error: setsErr } = await this.client
+      .from('workout_sets')
+      .delete()
+      .eq('session_id', sessionId);
+    if (setsErr) throw new Error(setsErr.message);
+
+    const { data: deletedRows, error: delErr } = await this.client
+      .from('workout_sessions')
+      .delete()
+      .eq('id', sessionId)
+      .select('id');
+
+    if (delErr) throw new Error(delErr.message);
+
+    // Fallback for projects that haven't applied sessions_delete_authenticated RLS yet
+    if (!deletedRows || deletedRows.length === 0) {
+      const { error: tombErr } = await this.client
+        .from('workout_sessions')
+        .update({ session_date: '__deleted__', status: 'completed' })
+        .eq('id', sessionId);
+      if (tombErr) throw new Error(tombErr.message);
+    }
+
+    await this.refresh();
   }
 
   async addSet(input: AddSetInput): Promise<WorkoutSet> {

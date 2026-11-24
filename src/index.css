@@ -161,14 +161,25 @@ html[data-theme="pink"] {
   -webkit-tap-highlight-color: transparent;
 }
 
-body {
+html,
+body,
+#root {
   margin: 0;
+  width: 100%;
+  min-height: 100%;
   min-height: 100dvh;
   background-color: var(--bg-app);
   color: var(--text-primary);
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", Roboto,
     sans-serif;
-  overscroll-behavior-y: none;
+}
+
+@media screen and (max-width: 768px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
 }
 
 .bb-widget {
@@ -226,8 +237,17 @@ body {
   color: var(--text-secondary);
 }
 
+.bb-safe-header {
+  padding-top: calc(env(safe-area-inset-top, 0px) + 0.75rem);
+  padding-bottom: 0.75rem;
+}
+
+.bb-safe-main {
+  padding-bottom: calc(6.5rem + env(safe-area-inset-bottom, 0px));
+}
+
 .bb-safe-bottom {
-  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));
 }
 
 .bb-slider-track {

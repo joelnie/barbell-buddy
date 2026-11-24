@@ -17,8 +17,8 @@ export function normalizeAndValidateSet(
   raw: { pullupMode?: PullupMode | null; weightKg?: number | null; reps: number },
 ): NormalizedSetFields {
   const reps = Math.round(Number(raw.reps));
-  if (!Number.isFinite(reps) || reps < 1 || reps > 999) {
-    throw new Error('Toistojen määrän on oltava välillä 1–999.');
+  if (!Number.isFinite(reps) || reps < 1 || reps > 20) {
+    throw new Error('Toistojen määrän on oltava välillä 1–20.');
   }
 
   if (exercise.category === 'pullup') {

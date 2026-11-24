@@ -27,7 +27,7 @@ export function generateLinearStops(min: number, max: number, step: number): num
   return stops;
 }
 
-export const REPS_RAW_OPTIONS: readonly number[] = generateLinearStops(1, 30, 1);
+export const REPS_RAW_OPTIONS: readonly number[] = generateLinearStops(1, 20, 1);
 
 export const PULLUP_RAW_WEIGHT_OPTIONS: readonly RawWeightOption[] = [
   'Assisted',
@@ -203,7 +203,7 @@ export function resolveInitialRepsIndex(exercise: Exercise, lastSet?: WorkoutSet
         : 10;
 
   const targetReps = lastSet ? Math.round(lastSet.reps) : defaultReps;
-  const clamped = Math.max(1, Math.min(30, targetReps));
+  const clamped = Math.max(1, Math.min(20, targetReps));
   return clamped - 1;
 }
 

@@ -13,9 +13,9 @@ export function Header({ onSelectTab }: HeaderProps) {
 
   return (
     <header
-      className="sticky top-0 z-30 border-b px-4 py-3 backdrop-blur-md"
+      className="bb-safe-header sticky top-0 z-30 border-b px-4 backdrop-blur-md"
       style={{
-        backgroundColor: 'color-mix(in srgb, var(--bg-surface) 88%, transparent)',
+        backgroundColor: 'color-mix(in srgb, var(--bg-surface) 92%, transparent)',
         borderColor: 'var(--accent-border)',
       }}
     >
