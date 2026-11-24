@@ -1,9 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from '../App';
 import { LocalRealtimeStore } from '../lib/localStore';
 import { computeSessionExpiryIso } from '../lib/dates';
+import { STARTER_EXERCISES } from '../lib/seedData';
+import {
+  getRawWeightOptionsForExercise,
+  getRepsSliderStops,
+  getWeightSliderStopsForExercise,
+} from '../lib/sliderOptions';
 
 async function enterJoelKeypadPin(user: ReturnType<typeof userEvent.setup>, digits: string[]) {
   const dialog = await screen.findByRole('dialog', { name: /switch to joel/i });
@@ -123,15 +129,21 @@ describe('Barbell Buddy PWA', () => {
     expect(await screen.findByText(/55 kg × 8 reps/i)).toBeInTheDocument();
     expect(screen.getByText(/\(added by Leevi\)/i)).toBeInTheDocument();
 
-    // Julie can also log a set for Leevi directly from her UI
+    // Julie can also log a set for Leevi directly from her UI using the two vertical sliders
     await user.click(screen.getByRole('button', { name: 'Leevi' }));
     await user.selectOptions(screen.getByLabelText('Exercise'), 'ex-squat');
-    const weightInput = screen.getByLabelText('Weight (kg)');
-    await user.clear(weightInput);
-    await user.type(weightInput, '110');
-    const repsInput = screen.getByLabelText('Reps');
-    await user.clear(repsInput);
-    await user.type(repsInput, '5');
+
+    const squatEx = STARTER_EXERCISES.find((e) => e.id === 'ex-squat')!;
+    const squatStops = getWeightSliderStopsForExercise(squatEx);
+    const idx110 = squatStops.findIndex((s) => s.rawValue === 110);
+
+    fireEvent.change(screen.getByRole('slider', { name: 'Weight' }), {
+      target: { value: String(idx110) },
+    });
+    fireEvent.change(screen.getByRole('slider', { name: 'Reps' }), {
+      target: { value: '4' }, // index 4 => 5 reps
+    });
+
     await user.click(screen.getByRole('button', { name: /Add Set for Leevi/i }));
 
     expect(await screen.findByText(/110 kg × 5 reps/i)).toBeInTheDocument();
@@ -141,9 +153,84 @@ describe('Barbell Buddy PWA', () => {
     storeB.dispose();
   });
 
-  it('supports Pull-ups in Assisted, Bodyweight, and +Kilograms modes with zero negative weights', async () => {
+  it('defines exact discrete slider stops for Reps (1-30), Pull-ups, Bench, Squat, Deadlift (25-180), and Dumbbells', () => {
+    const repsStops = getRepsSliderStops();
+    expect(repsStops).toHaveLength(30);
+    expect(repsStops[0].rawValue).toBe(1);
+    expect(repsStops[29].rawValue).toBe(30);
+
+    const pullups = STARTER_EXERCISES.find((e) => e.id === 'ex-pullups')!;
+    expect(getRawWeightOptionsForExercise(pullups)).toEqual([
+      'Assisted',
+      'Bodyweight',
+      2.5,
+      5,
+      7.5,
+      10,
+      12.5,
+      15,
+      17.5,
+      20,
+      22.5,
+      25,
+      27.5,
+      30,
+    ]);
+
+    const bench = STARTER_EXERCISES.find((e) => e.id === 'ex-bench-press')!;
+    const benchOpts = getRawWeightOptionsForExercise(bench);
+    expect(benchOpts[0]).toBe(20);
+    expect(benchOpts[1]).toBe(22.5);
+    expect(benchOpts[benchOpts.length - 1]).toBe(120);
+    expect(benchOpts).toHaveLength(41);
+
+    const squat = STARTER_EXERCISES.find((e) => e.id === 'ex-squat')!;
+    const squatOpts = getRawWeightOptionsForExercise(squat);
+    expect(squatOpts[0]).toBe(20);
+    expect(squatOpts[1]).toBe(22.5);
+    expect(squatOpts[squatOpts.length - 1]).toBe(150);
+    expect(squatOpts).toHaveLength(53);
+
+    const deadlift = STARTER_EXERCISES.find((e) => e.id === 'ex-deadlift')!;
+    const deadliftOpts = getRawWeightOptionsForExercise(deadlift);
+    expect(deadliftOpts[0]).toBe(25);
+    expect(deadliftOpts[1]).toBe(27.5);
+    expect(deadliftOpts[deadliftOpts.length - 1]).toBe(180);
+    expect(deadliftOpts).toHaveLength(63);
+
+    const inclineDb = STARTER_EXERCISES.find((e) => e.id === 'ex-incline-db-bench')!;
+    expect(getRawWeightOptionsForExercise(inclineDb)).toEqual([
+      8, 9, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40,
+    ]);
+
+    // Custom dumbbell exercise uses exact same dumbbell stop array
+    expect(
+      getRawWeightOptionsForExercise({
+        id: 'ex-custom-curl',
+        name: 'Dumbbell Curl',
+        category: 'dumbbell',
+        isBuiltin: false,
+        sortOrder: 99,
+        createdAt: '2026-11-24T00:00:00.000Z',
+      }),
+    ).toEqual([8, 9, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40]);
+
+    // Custom bodyweight exercise uses ['Bodyweight']
+    expect(
+      getRawWeightOptionsForExercise({
+        id: 'ex-custom-dips',
+        name: 'Push-ups',
+        category: 'bodyweight',
+        isBuiltin: false,
+        sortOrder: 100,
+        createdAt: '2026-11-24T00:00:00.000Z',
+      }),
+    ).toEqual(['Bodyweight']);
+  });
+
+  it('logs Pull-ups (Assisted, Bodyweight, +kg) and weighted lifts via vertical sliders, touch drag, and smart snapping', async () => {
     const user = userEvent.setup();
-    const store = new LocalRealtimeStore({ storageKey: 'test-pullups' });
+    const store = new LocalRealtimeStore({ storageKey: 'test-pullups-sliders' });
     await store.initialize();
 
     localStorage.setItem('pullup-user', 'lifter-julie');
@@ -152,35 +239,71 @@ describe('Barbell Buddy PWA', () => {
     await user.click(await screen.findByRole('button', { name: /New Session/i }));
     await user.click(screen.getByRole('button', { name: /Start Session/i }));
 
-    // Pull-ups is selected first by sortOrder
+    // Separate Pull-up mode toggle row is replaced by the Weight vertical slider
+    expect(screen.queryByRole('group', { name: /Pull-up mode/i })).not.toBeInTheDocument();
     expect(screen.getByLabelText('Exercise')).toHaveValue('ex-pullups');
 
-    // 1. Assisted mode -> weight input is hidden, logs reps only (weightKg === null)
-    await user.click(screen.getByRole('button', { name: 'Assisted' }));
-    expect(screen.queryByLabelText('Weight (kg)')).not.toBeInTheDocument();
-    const repsInput = screen.getByLabelText('Reps');
-    await user.clear(repsInput);
-    await user.type(repsInput, '10');
+    const repsSlider = screen.getByRole('slider', { name: 'Reps' });
+    const weightSlider = screen.getByRole('slider', { name: 'Weight' });
+
+    // Default for Pull-ups: Bodyweight (index 1) and 8 reps (index 7)
+    expect(weightSlider).toHaveAttribute('aria-valuetext', 'Bodyweight');
+    expect(repsSlider).toHaveAttribute('aria-valuetext', '8 reps');
+
+    // 1. Step down 1 notch on Weight -> Assisted (index 0), step up twice on Reps -> 10 reps
+    await user.click(screen.getByRole('button', { name: 'Decrease weight' }));
+    expect(weightSlider).toHaveAttribute('aria-valuetext', 'Assisted');
+    await user.click(screen.getByRole('button', { name: 'Increase reps' }));
+    await user.click(screen.getByRole('button', { name: 'Increase reps' }));
+    expect(repsSlider).toHaveAttribute('aria-valuetext', '10 reps');
+
     await user.click(screen.getByRole('button', { name: /Add Set for Julie/i }));
     expect(await screen.findByText(/Assisted × 10 reps/i)).toBeInTheDocument();
 
-    // 2. Bodyweight mode -> weight input is hidden, logs reps only (weightKg === null)
-    await user.click(screen.getByRole('button', { name: 'Bodyweight' }));
-    expect(screen.queryByLabelText('Weight (kg)')).not.toBeInTheDocument();
-    await user.clear(repsInput);
-    await user.type(repsInput, '7');
+    // 2. Step up 1 notch on Weight -> Bodyweight (index 1), set Reps to 7 (index 6)
+    await user.click(screen.getByRole('button', { name: 'Increase weight' }));
+    expect(weightSlider).toHaveAttribute('aria-valuetext', 'Bodyweight');
+    fireEvent.change(repsSlider, { target: { value: '6' } });
     await user.click(screen.getByRole('button', { name: /Add Set for Julie/i }));
     expect(await screen.findByText(/Bodyweight × 7 reps/i)).toBeInTheDocument();
 
-    // 3. Weighted (+ Kilograms) mode -> shows weight input, logs +kg & reps
-    await user.click(screen.getByRole('button', { name: '+ Kilograms' }));
-    const weightInput = screen.getByLabelText('Weight (kg)');
-    await user.clear(weightInput);
-    await user.type(weightInput, '12.5');
-    await user.clear(repsInput);
-    await user.type(repsInput, '5');
+    // 3. Weighted Pull-ups via vertical pointer scrubbing on the track!
+    const weightTrack = screen.getByTestId('weight-slider-track');
+    expect(weightTrack).toHaveClass('touch-none', 'bb-slider-track');
+    vi.spyOn(weightTrack, 'getBoundingClientRect').mockReturnValue({
+      top: 100,
+      bottom: 332,
+      left: 0,
+      right: 120,
+      width: 120,
+      height: 232, // usable height = 232 - 32 = 200px
+      x: 0,
+      y: 100,
+      toJSON: () => ({}),
+    });
+
+    // Pull-up stops length = 14 (maxIndex = 13). Index 6 => 12.5 kg (ratio = 6/13)
+    // yFromTop = usableHeight * (1 - 6/13) = 200 * (7/13) ≈ 107.69 => clientY = 100 + 16 + 107.69 = 223.69
+    fireEvent.pointerDown(weightTrack, { pointerId: 1, clientY: 280 });
+    fireEvent.pointerMove(weightTrack, { pointerId: 1, clientY: 223.7 });
+    fireEvent.pointerUp(weightTrack, { pointerId: 1, clientY: 223.7 });
+
+    expect(weightSlider).toHaveAttribute('aria-valuetext', '+12.5 kg');
+    fireEvent.change(repsSlider, { target: { value: '4' } }); // 5 reps
     await user.click(screen.getByRole('button', { name: /Add Set for Julie/i }));
     expect(await screen.findByText(/\+12\.5 kg × 5 reps/i)).toBeInTheDocument();
+
+    // 4. Switch to Deadlift -> minimum stop is 25 kg (index 0), top stop is 180 kg (index 62)
+    await user.selectOptions(screen.getByLabelText('Exercise'), 'ex-deadlift');
+    fireEvent.change(weightSlider, { target: { value: '0' } });
+    expect(weightSlider).toHaveAttribute('aria-valuetext', '25 kg');
+    fireEvent.change(weightSlider, { target: { value: '62' } });
+    expect(weightSlider).toHaveAttribute('aria-valuetext', '180 kg');
+
+    // Switch back to Pull-ups -> smartly snaps back to Julie's last Pull-up set (+12.5 kg x 5 reps)
+    await user.selectOptions(screen.getByLabelText('Exercise'), 'ex-pullups');
+    expect(weightSlider).toHaveAttribute('aria-valuetext', '+12.5 kg');
+    expect(repsSlider).toHaveAttribute('aria-valuetext', '5 reps');
 
     const sets = store.getSnapshot().sets;
     expect(sets).toHaveLength(3);

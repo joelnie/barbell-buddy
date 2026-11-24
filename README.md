@@ -9,9 +9,9 @@
 ## Features
 
 - **Starter Crew & Open Progress**: Comes ready with **Julie**, **Joel** (Admin), and **Leevi**, plus support for adding new lifters anytime. Everyone can view historical sessions and strength curves, and partners in the same workout can log sets for one another.
-- **Starter & Custom Exercises**:
-  - **Pull-ups** with three dedicated modes: **`Assisted`** (reps only — never negative weight), **`Bodyweight`** (reps only), and **`+ Kilograms`** (added weight + reps).
-  - **Bench Press**, **Incline Dumbbell Bench Press** (`kg / DB`), **Deadlift**, and **Squat**, plus custom exercises added in-app.
+- **Starter & Custom Exercises with Dual Vertical Sliders**:
+  - **Left Vertical Slider**: **Reps** (`1`–`30`) with smooth touch scrubbing and `+` / `−` precision steppers.
+  - **Right Vertical Slider**: Exercise-tailored discrete weight stops — **Pull-ups** (`Assisted`, `Bodyweight`, `+2.5` to `+30 kg`, never negative weight), **Bench Press** (`20`–`120 kg` by `2.5`), **Squat** (`20`–`150 kg` by `2.5`), **Deadlift** (`25`–`180 kg` by `2.5`), **Dumbbells / Incline DB Bench Press** (`8, 9, 10, 12, …, 40 kg / DB`), plus custom exercises added in-app.
 - **Participant-Scoped Live Sessions & Parallel Workouts**:
   - Sessions are named by date (`YYYY-MM-DD`).
   - Tap **New Session** and select who is lifting together. Only selected participants see and log into that live session on Tab 1—allowing other lifters to run separate sessions on the very same day.

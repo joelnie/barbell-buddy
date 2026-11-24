@@ -229,3 +229,9 @@ body {
 .bb-safe-bottom {
   padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
 }
+
+.bb-slider-track {
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}

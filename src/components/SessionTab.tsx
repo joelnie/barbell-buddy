@@ -4,7 +4,6 @@ import {
   CheckCircle2,
   Clock,
   Dumbbell,
-  Minus,
   Pencil,
   Plus,
   Sparkles,
@@ -20,11 +19,19 @@ import {
   formatWeightNumber,
   getLastLoggedSetForLifterExercise,
 } from '../lib/metrics';
+import {
+  getRepsSliderStops,
+  getWeightSliderStopsForExercise,
+  mapWeightStopToSetPayload,
+  resolveInitialRepsIndex,
+  resolveInitialWeightIndex,
+} from '../lib/sliderOptions';
 import type {
   ExerciseCategory,
   PullupMode,
   WorkoutSet,
 } from '../types/models';
+import { VerticalDiscreteSlider } from './VerticalDiscreteSlider';
 
 export function SessionTab() {
   const { store, snapshot, mainUser, activeSessionForMainUser, completedSessions } = useApp();
@@ -33,12 +40,11 @@ export function SessionTab() {
   const [selectedParticipantIds, setSelectedParticipantIds] = useState<string[]>([]);
   const [sessionError, setSessionError] = useState<string | null>(null);
 
-  // Active session logging state
+  // Active session logging state (vertical discrete slider indices)
   const [selectedLifterId, setSelectedLifterId] = useState<string>('');
   const [selectedExerciseId, setSelectedExerciseId] = useState<string>('');
-  const [pullupMode, setPullupMode] = useState<PullupMode>('bodyweight');
-  const [weightInput, setWeightInput] = useState<string>('20');
-  const [repsInput, setRepsInput] = useState<string>('8');
+  const [repsIndex, setRepsIndex] = useState<number>(7); // 8 reps default
+  const [weightIndex, setWeightIndex] = useState<number>(1);
   const [formError, setFormError] = useState<string | null>(null);
 
   // Quick "+ Exercise" inline sheet
@@ -99,38 +105,24 @@ export function SessionTab() {
     [snapshot.exercises, selectedExerciseId],
   );
 
-  // Pre-fill smartly from the selected lifter's most recent set for the chosen exercise
+  const repsStops = useMemo(() => getRepsSliderStops(), []);
+
+  const weightStops = useMemo(
+    () => (selectedExercise ? getWeightSliderStopsForExercise(selectedExercise) : []),
+    [selectedExercise],
+  );
+
+  // Pre-fill smartly by snapping to the lifter's most recent set for the chosen exercise
   useEffect(() => {
     if (!selectedLifterId || !selectedExercise) return;
+    const stopsForExercise = getWeightSliderStopsForExercise(selectedExercise);
     const lastSet = getLastLoggedSetForLifterExercise(
       snapshot.sets,
       selectedLifterId,
       selectedExercise.id,
     );
-    if (lastSet) {
-      if (selectedExercise.category === 'pullup') {
-        setPullupMode(lastSet.pullupMode ?? 'bodyweight');
-        setWeightInput(lastSet.weightKg !== null ? formatWeightNumber(lastSet.weightKg) : '10');
-      } else if (selectedExercise.category !== 'bodyweight') {
-        setWeightInput(lastSet.weightKg !== null ? formatWeightNumber(lastSet.weightKg) : '20');
-      }
-      setRepsInput(String(lastSet.reps));
-    } else {
-      if (selectedExercise.category === 'pullup') {
-        setPullupMode('bodyweight');
-        setWeightInput('10');
-        setRepsInput('8');
-      } else if (selectedExercise.category === 'dumbbell') {
-        setWeightInput('20');
-        setRepsInput('10');
-      } else if (selectedExercise.category === 'barbell') {
-        setWeightInput('60');
-        setRepsInput('5');
-      } else {
-        setWeightInput('30');
-        setRepsInput('10');
-      }
-    }
+    setRepsIndex(resolveInitialRepsIndex(selectedExercise, lastSet));
+    setWeightIndex(resolveInitialWeightIndex(selectedExercise, stopsForExercise, lastSet));
   }, [selectedLifterId, selectedExercise?.id]);
 
   const openNewSessionFlow = () => {
@@ -170,40 +162,27 @@ export function SessionTab() {
     }
   };
 
-  const stepWeight = (delta: number) => {
-    const current = parseFloat(weightInput);
-    const base = Number.isFinite(current) ? current : 0;
-    const next = Math.max(0, Math.round((base + delta) * 100) / 100);
-    setWeightInput(formatWeightNumber(next));
-  };
-
-  const stepReps = (delta: number) => {
-    const current = parseInt(repsInput, 10);
-    const base = Number.isFinite(current) ? current : 1;
-    const next = Math.max(1, Math.min(999, base + delta));
-    setRepsInput(String(next));
-  };
-
   const handleAddSet = async (e: FormEvent) => {
     e.preventDefault();
     if (!activeSessionForMainUser || !selectedExercise || !selectedLifterId) return;
     setFormError(null);
 
-    const parsedReps = Number(repsInput);
-    const needsWeight =
-      selectedExercise.category === 'pullup'
-        ? pullupMode === 'weighted'
-        : selectedExercise.category !== 'bodyweight';
+    const safeRepStop = repsStops[Math.max(0, Math.min(repsStops.length - 1, repsIndex))];
+    const safeWeightStop =
+      weightStops[Math.max(0, Math.min(weightStops.length - 1, weightIndex))];
 
-    const parsedWeight = needsWeight ? Number(weightInput) : null;
+    if (!safeRepStop || !safeWeightStop) return;
+
+    const parsedReps = typeof safeRepStop.rawValue === 'number' ? safeRepStop.rawValue : 1;
+    const { pullupMode, weightKg } = mapWeightStopToSetPayload(selectedExercise, safeWeightStop);
 
     try {
       await store.addSet({
         sessionId: activeSessionForMainUser.id,
         lifterId: selectedLifterId,
         exerciseId: selectedExercise.id,
-        pullupMode: selectedExercise.category === 'pullup' ? pullupMode : null,
-        weightKg: parsedWeight,
+        pullupMode,
+        weightKg,
         reps: parsedReps,
         loggedBy: mainUser?.id ?? selectedLifterId,
       });
@@ -456,11 +435,15 @@ export function SessionTab() {
     group.sets.push(s);
   }
 
-  const showWeightStepper =
-    selectedExercise &&
-    (selectedExercise.category === 'pullup'
-      ? pullupMode === 'weighted'
-      : selectedExercise.category !== 'bodyweight');
+  const weightBadgeText = (() => {
+    if (!selectedExercise || weightStops.length === 0) return undefined;
+    if (selectedExercise.category === 'pullup') return 'Asst–+30';
+    if (selectedExercise.category === 'dumbbell') return 'per DB';
+    if (selectedExercise.category === 'bodyweight') return 'BW';
+    const first = weightStops[0]?.tickLabel;
+    const last = weightStops[weightStops.length - 1]?.tickLabel;
+    return first && last ? `${first}–${last}` : undefined;
+  })();
 
   return (
     <div className="space-y-4">
@@ -679,135 +662,31 @@ export function SessionTab() {
             </div>
           )}
 
-          {/* Pull-up Mode Selector: Assisted | Bodyweight | Weighted (+kg) */}
-          {selectedExercise?.category === 'pullup' && (
-            <div>
-              <span
-                className="mb-1.5 block text-xs font-bold uppercase tracking-wider"
-                style={{ color: 'var(--text-muted)' }}
-              >
-                Pull-up Option
-              </span>
-              <div className="grid grid-cols-3 gap-2" role="group" aria-label="Pull-up mode">
-                {(
-                  [
-                    { id: 'assisted', label: 'Assisted' },
-                    { id: 'bodyweight', label: 'Bodyweight' },
-                    { id: 'weighted', label: '+ Kilograms' },
-                  ] as const
-                ).map((opt) => {
-                  const active = pullupMode === opt.id;
-                  return (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      aria-pressed={active}
-                      onClick={() => setPullupMode(opt.id)}
-                      className={`rounded-xl py-2.5 text-xs font-bold transition ${
-                        active ? 'bb-pill-active' : 'bb-pill-idle'
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  );
-                })}
-              </div>
-              {pullupMode !== 'weighted' && (
-                <p className="mt-1.5 text-[11px]" style={{ color: 'var(--text-muted)' }}>
-                  {pullupMode === 'assisted'
-                    ? 'Assisted mode logs reps directly — no negative weights.'
-                    : 'Bodyweight mode logs reps directly.'}
-                </p>
-              )}
-            </div>
-          )}
+          {/* Side-by-Side Vertical Sliders: Left = Reps (1-30), Right = Exercise Weight */}
+          <div className="grid grid-cols-2 gap-3" role="group" aria-label="Set reps and weight sliders">
+            <VerticalDiscreteSlider
+              id="set-reps-slider"
+              label="Reps"
+              badgeText="1–30"
+              stops={repsStops}
+              selectedIndex={repsIndex}
+              onSelectIndex={setRepsIndex}
+              stepUpLabel="Increase reps"
+              stepDownLabel="Decrease reps"
+              trackTestId="reps-slider-track"
+            />
 
-          {/* Weight & Reps Steppers */}
-          <div className={`grid gap-3 ${showWeightStepper ? 'grid-cols-2' : 'grid-cols-1'}`}>
-            {showWeightStepper && (
-              <div>
-                <label
-                  htmlFor="set-weight-input"
-                  className="mb-1.5 block text-xs font-bold uppercase tracking-wider"
-                  style={{ color: 'var(--text-muted)' }}
-                >
-                  {selectedExercise?.category === 'pullup'
-                    ? 'Added Weight (+kg)'
-                    : selectedExercise?.category === 'dumbbell'
-                      ? 'Weight (kg / DB)'
-                      : 'Weight (kg)'}
-                </label>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => stepWeight(-2.5)}
-                    aria-label="Decrease weight by 2.5 kg"
-                    className="bb-subcard flex h-11 w-10 shrink-0 items-center justify-center font-bold active:scale-95"
-                  >
-                    <Minus className="h-4 w-4" />
-                  </button>
-                  <input
-                    id="set-weight-input"
-                    aria-label="Weight (kg)"
-                    type="number"
-                    inputMode="decimal"
-                    min="0"
-                    step="0.5"
-                    value={weightInput}
-                    onChange={(e) => setWeightInput(e.target.value)}
-                    className="bb-input h-11 w-full min-w-0 text-center text-base font-extrabold"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => stepWeight(2.5)}
-                    aria-label="Increase weight by 2.5 kg"
-                    className="bb-subcard flex h-11 w-10 shrink-0 items-center justify-center font-bold active:scale-95"
-                  >
-                    <Plus className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-            )}
-
-            <div>
-              <label
-                htmlFor="set-reps-input"
-                className="mb-1.5 block text-xs font-bold uppercase tracking-wider"
-                style={{ color: 'var(--text-muted)' }}
-              >
-                Reps
-              </label>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => stepReps(-1)}
-                  aria-label="Decrease reps"
-                  className="bb-subcard flex h-11 w-10 shrink-0 items-center justify-center font-bold active:scale-95"
-                >
-                  <Minus className="h-4 w-4" />
-                </button>
-                <input
-                  id="set-reps-input"
-                  aria-label="Reps"
-                  type="number"
-                  inputMode="numeric"
-                  min="1"
-                  max="999"
-                  step="1"
-                  value={repsInput}
-                  onChange={(e) => setRepsInput(e.target.value)}
-                  className="bb-input h-11 w-full min-w-0 text-center text-base font-extrabold"
-                />
-                <button
-                  type="button"
-                  onClick={() => stepReps(1)}
-                  aria-label="Increase reps"
-                  className="bb-subcard flex h-11 w-10 shrink-0 items-center justify-center font-bold active:scale-95"
-                >
-                  <Plus className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
+            <VerticalDiscreteSlider
+              id="set-weight-slider"
+              label="Weight"
+              badgeText={weightBadgeText}
+              stops={weightStops}
+              selectedIndex={weightIndex}
+              onSelectIndex={setWeightIndex}
+              stepUpLabel="Increase weight"
+              stepDownLabel="Decrease weight"
+              trackTestId="weight-slider-track"
+            />
           </div>
 
           {formError && (

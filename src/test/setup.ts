@@ -61,6 +61,25 @@ Object.defineProperty(globalThis, 'BroadcastChannel', {
   configurable: true,
 });
 
+if (typeof globalThis.PointerEvent === 'undefined') {
+  class MockPointerEvent extends MouseEvent {
+    readonly pointerId: number;
+    readonly pointerType: string;
+
+    constructor(type: string, params: PointerEventInit = {}) {
+      super(type, params);
+      this.pointerId = params.pointerId ?? 1;
+      this.pointerType = params.pointerType ?? 'touch';
+    }
+  }
+
+  Object.defineProperty(globalThis, 'PointerEvent', {
+    value: MockPointerEvent,
+    writable: true,
+    configurable: true,
+  });
+}
+
 afterEach(() => {
   cleanup();
   localStorage.clear();
