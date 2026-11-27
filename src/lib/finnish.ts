@@ -93,8 +93,24 @@ export function isBenchPressExercise(exercise: ExerciseIdentity): boolean {
   return (
     exercise.id === 'ex-bench-press' ||
     Boolean(exercise.isBuiltin && exercise.sortOrder === 2) ||
+    norm === 'penkki' ||
     norm === 'bench press' ||
     norm === 'penkkipunnerrus'
+  );
+}
+
+export function findDefaultSessionExercise<T extends ExerciseIdentity>(
+  exercises: readonly T[],
+): T | undefined {
+  if (exercises.length === 0) return undefined;
+  return (
+    exercises.find((e) => e.name.trim().toLowerCase() === 'penkki') ??
+    exercises.find((e) => {
+      const norm = e.name.trim().toLowerCase();
+      return norm === 'penkkipunnerrus' || norm === 'bench press';
+    }) ??
+    exercises.find((e) => isBenchPressExercise(e)) ??
+    exercises[0]
   );
 }
 

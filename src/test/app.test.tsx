@@ -361,8 +361,8 @@ describe('Barbell Buddy PWA (Suomi)', () => {
     await user.click(await screen.findByRole('button', { name: /Uusi treeni/i }));
     await user.click(screen.getByRole('button', { name: /Aloita treeni/i }));
 
-    // Exercises are ordered alphabetically, so Kyykky is first; select Leuanveto to test pull-up wheel stops
-    expect(screen.getByLabelText('Liike')).toHaveValue('ex-squat');
+    // Starting a new session defaults to Penkkipunnerrus; select Leuanveto to test pull-up wheel stops
+    expect(screen.getByLabelText('Liike')).toHaveValue('ex-bench-press');
     await user.selectOptions(screen.getByLabelText('Liike'), 'ex-pullups');
     expect(screen.getByLabelText('Liike')).toHaveValue('ex-pullups');
 
@@ -774,13 +774,16 @@ describe('Barbell Buddy PWA (Suomi)', () => {
     await user.click(screen.getByRole('button', { name: /Julie/i }));
     await user.click(screen.getByRole('button', { name: /Aloita treeni \(2\)/i }));
 
-    expect(screen.getByLabelText('Liike')).toHaveValue('ex-squat');
-    await user.selectOptions(screen.getByLabelText('Liike'), 'ex-pullups');
-
     const repsSlider = screen.getByRole('slider', { name: 'Toistot' });
     const weightSlider = screen.getByRole('slider', { name: 'Paino' });
 
-    // Immediately defaults to Joel's last Leuanveto (+17.5 kg x 6)
+    // New session starts on Penkkipunnerrus and immediately defaults to Joel's last Penkkipunnerrus (97.5 kg x 4)
+    expect(screen.getByLabelText('Liike')).toHaveValue('ex-bench-press');
+    expect(weightSlider).toHaveAttribute('aria-valuetext', '97.5 kg');
+    expect(repsSlider).toHaveAttribute('aria-valuetext', '4 toistoa');
+
+    // Selecting Leuanveto immediately defaults to Joel's last Leuanveto (+17.5 kg x 6)
+    await user.selectOptions(screen.getByLabelText('Liike'), 'ex-pullups');
     expect(weightSlider).toHaveAttribute('aria-valuetext', '+17.5 kg');
     expect(repsSlider).toHaveAttribute('aria-valuetext', '6 toistoa');
 
@@ -1520,6 +1523,67 @@ describe('Barbell Buddy PWA (Suomi)', () => {
       'Vinopenkki käsipainoilla',
       'Äärikyykky',
     ]);
+
+    store.dispose();
+  });
+
+  it('defaults a new session to Penkki / Penkkipunnerrus, preserves the latest exercise choice across tabs, and resets to Penkki on the next new session', async () => {
+    const user = userEvent.setup();
+    const store = new LocalRealtimeStore({ storageKey: 'test-default-penkki-new-session' });
+    await store.initialize();
+
+    await store.addExercise({ name: 'Alatalja', category: 'machine' });
+
+    localStorage.setItem('penkki-default-user', 'lifter-julie');
+    render(<App store={store} mainUserStorageKey="penkki-default-user" />);
+
+    // 1. Start Session #1 -> defaults to Penkkipunnerrus (not Alatalja or Kyykky, and not Vinopenkki käsipainoilla)
+    await user.click(await screen.findByRole('button', { name: /Uusi treeni/i }));
+    await user.click(screen.getByRole('button', { name: /Aloita treeni/i }));
+    expect(screen.getByLabelText('Liike')).toHaveValue('ex-bench-press');
+
+    // 2. Switch exercise to Kyykky and adjust sliders -> preserved across Treeni -> Historia -> Kehitys -> Treeni
+    await user.selectOptions(screen.getByLabelText('Liike'), 'ex-squat');
+    fireEvent.change(screen.getByRole('slider', { name: 'Toistot' }), {
+      target: { value: '9' }, // 10 toistoa
+    });
+    fireEvent.change(screen.getByRole('slider', { name: 'Paino' }), {
+      target: { value: '20' }, // 20 + 20 * 2.5 = 70 kg
+    });
+
+    await user.click(screen.getByRole('tab', { name: /Historia/i }));
+    await user.click(screen.getByRole('tab', { name: /Kehitys/i }));
+    await user.click(screen.getByRole('tab', { name: /Treeni/i }));
+
+    expect(await screen.findByLabelText('Liike')).toHaveValue('ex-squat');
+    expect(screen.getByRole('slider', { name: 'Toistot' })).toHaveAttribute(
+      'aria-valuetext',
+      '10 toistoa',
+    );
+    expect(screen.getByRole('slider', { name: 'Paino' })).toHaveAttribute(
+      'aria-valuetext',
+      '70 kg',
+    );
+
+    // 3. End Session #1, rename Penkkipunnerrus -> "Penkki", and start Session #2 -> defaults to "Penkki" with 20–120 kg bench stops
+    await user.click(screen.getByRole('button', { name: /Lopeta treeni/i }));
+    expect(await screen.findByRole('button', { name: /Uusi treeni/i })).toBeInTheDocument();
+
+    await act(async () => {
+      await store.renameExercise('ex-bench-press', 'Penkki', 'lifter-joel');
+    });
+
+    await user.click(screen.getByRole('button', { name: /Uusi treeni/i }));
+    await user.click(screen.getByRole('button', { name: /Aloita treeni/i }));
+
+    const exerciseSelect = await screen.findByLabelText('Liike');
+    expect(exerciseSelect).toHaveValue('ex-bench-press');
+    expect(within(exerciseSelect).getByRole('option', { name: 'Penkki' })).toBeInTheDocument();
+
+    const renamedBench = store.getSnapshot().exercises.find((e) => e.id === 'ex-bench-press')!;
+    const benchOpts = getRawWeightOptionsForExercise(renamedBench);
+    expect(benchOpts[0]).toBe(20);
+    expect(benchOpts[benchOpts.length - 1]).toBe(120);
 
     store.dispose();
   });
