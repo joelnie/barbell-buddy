@@ -21,9 +21,9 @@
   - Tap **Lopeta treeni** when finished, or let Barbell Buddy **auto-save and finalize the session at `23:59`** local time automatically (completed sessions then move to **Historia**).
 - **4-Tab Mobile Experience**:
   1. **Treeni**: Start a session, switch between session partners in 1 tap, log/edit sets live, and watch friends' ongoing workouts in real-time read-only mode.
-  2. **Historia**: Browse all previous sessions, tap any session to inspect every exercise, set, rep, and weight, or delete sessions from history with an `"Oletko varma?"` confirmation (**Joel** can also restore deleted sessions).
+  2. **Historia**: Browse all previous sessions, tap any session to inspect every exercise, set, rep, and weight, or delete sessions from history with an `"Oletko varma?"` confirmation.
   3. **Kehitys**: Multi-lifter SVG progression charts (Top Weight, Estimated 1RM, and Pull-up mode breakdowns) + Personal Record cards.
-  4. **Asetukset**: Switch Main User, customize themes & secondary widget border colors, and manage users and exercises (**Joel** can also rename exercises across all sessions).
+  4. **Asetukset**: Switch Main User, customize themes & secondary widget border colors, manage users and exercises (**Joel** can rename exercises across all sessions), and restore deleted sessions (**Poistetut treenit**, visible to **Joel** at the bottom of Settings).
 - **Admin PIN**:
   - Switching Main User to **Joel** requires his 4-digit admin PIN.
   - Anyone can add new users or exercises; **only Joel** can delete users, rename or remove exercises, and restore sessions deleted from history.

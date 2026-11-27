@@ -933,7 +933,7 @@ describe('Barbell Buddy PWA (Suomi)', () => {
     storeLeevi.dispose();
   });
 
-  it('allows only Joel (admin) to view and restore sessions deleted from Historia, restoring sets to Historia and Kehitys', async () => {
+  it('allows only Joel (admin) to view Poistetut treenit at the bottom of Asetukset (not in Historia) and restore sessions to Historia and Kehitys', async () => {
     const user = userEvent.setup();
     const store = new LocalRealtimeStore({ storageKey: 'test-admin-restore-session' });
     await store.initialize();
@@ -976,15 +976,17 @@ describe('Barbell Buddy PWA (Suomi)', () => {
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: /2026-11-18/i })).not.toBeInTheDocument();
     });
-    // Non-admin Julie cannot see Poistetut treenit or restore via store
     expect(screen.queryByTestId('deleted-sessions-section')).not.toBeInTheDocument();
     await expect(store.restoreSession(sess.id, 'lifter-julie')).rejects.toThrow(/Vain Joel/i);
 
     await user.click(screen.getByRole('tab', { name: /Kehitys/i }));
     expect(screen.queryByText('57.5 kg')).not.toBeInTheDocument();
 
-    // Switch to Joel (admin) via PIN
+    // Non-admin Julie also does NOT see Poistetut treenit in Asetukset
     await user.click(screen.getByRole('tab', { name: /Asetukset/i }));
+    expect(screen.queryByTestId('deleted-sessions-section')).not.toBeInTheDocument();
+
+    // Switch to Joel (admin) via PIN
     await user.click(screen.getByRole('button', { name: /Joel.*Vaatii 4-numeroisen PIN-koodin/i }));
     await enterJoelKeypadPin(user, String(1290 * 2).split(''));
     await waitFor(() => {
@@ -993,8 +995,12 @@ describe('Barbell Buddy PWA (Suomi)', () => {
       ).not.toBeInTheDocument();
     });
 
-    // Open Historia as Joel -> sees Poistetut treenit and restores 2026-11-18
+    // Even as Joel, Poistetut treenit is NOT shown in Historia
     await user.click(screen.getByRole('tab', { name: /Historia/i }));
+    expect(screen.queryByTestId('deleted-sessions-section')).not.toBeInTheDocument();
+
+    // In Asetukset, Joel sees Poistetut treenit at the bottom and restores 2026-11-18
+    await user.click(screen.getByRole('tab', { name: /Asetukset/i }));
     const deletedSection = await screen.findByTestId('deleted-sessions-section');
     const deletedCard = within(deletedSection).getByTestId(`deleted-session-card-${sess.id}`);
     expect(within(deletedCard).getByText('2026-11-18')).toBeInTheDocument();
@@ -1003,11 +1009,11 @@ describe('Barbell Buddy PWA (Suomi)', () => {
     await user.click(
       within(deletedCard).getByRole('button', { name: /Palauta treeni 2026-11-18/i }),
     );
+    expect(await screen.findByText(/Palautettiin treeni 2026-11-18!/i)).toBeInTheDocument();
+    expect(within(deletedSection).getByText('Ei poistettuja treenejä.')).toBeInTheDocument();
 
-    // Deleted section disappears and the restored session + its set are back in Historia and Kehitys
-    await waitFor(() => {
-      expect(screen.queryByTestId('deleted-sessions-section')).not.toBeInTheDocument();
-    });
+    // Restored session + its set are back in Historia and Kehitys
+    await user.click(screen.getByRole('tab', { name: /Historia/i }));
     const restoredBtn = await screen.findByRole('button', { name: /2026-11-18/i });
     await user.click(restoredBtn);
     expect(await screen.findByText(/57\.5 kg × 6 toistoa/i)).toBeInTheDocument();

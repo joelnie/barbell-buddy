@@ -1,27 +1,16 @@
 import { useMemo, useState } from 'react';
-import {
-  CalendarClock,
-  ChevronDown,
-  ChevronUp,
-  Dumbbell,
-  RotateCcw,
-  ShieldCheck,
-  Trash2,
-} from 'lucide-react';
+import { CalendarClock, ChevronDown, ChevronUp, Dumbbell, Trash2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { formatTimeShort } from '../lib/dates';
 import { formatSetLoad } from '../lib/metrics';
 import type { WorkoutSet } from '../types/models';
 
 export function HistoryTab() {
-  const { store, snapshot, mainUser, completedSessions, deletedSessions } = useApp();
+  const { store, snapshot, completedSessions } = useApp();
   const [lifterFilter, setLifterFilter] = useState<string>('all');
   const [expandedSessionIds, setExpandedSessionIds] = useState<Set<string>>(() => new Set());
   const [confirmDeleteSessionId, setConfirmDeleteSessionId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [showDeletedSessions, setShowDeletedSessions] = useState<boolean>(true);
-
-  const isJoelAdmin = Boolean(mainUser?.isAdmin);
 
   const lifterMap = useMemo(
     () => new Map(snapshot.lifters.map((l) => [l.id, l])),
@@ -330,161 +319,6 @@ export function HistoryTab() {
             );
           })}
         </div>
-      )}
-
-      {/* Joel (Admin) Only: Soft-Deleted Sessions & Restore */}
-      {isJoelAdmin && deletedSessions.length > 0 && (
-        <section
-          data-testid="deleted-sessions-section"
-          aria-label="Poistetut treenit"
-          className="bb-widget p-4"
-        >
-          <button
-            type="button"
-            onClick={() => setShowDeletedSessions((prev) => !prev)}
-            aria-expanded={showDeletedSessions}
-            className="flex w-full items-center justify-between gap-3 text-left transition hover:opacity-95"
-          >
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-extrabold uppercase tracking-wider">
-                  Poistetut treenit
-                </span>
-                <span
-                  className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold"
-                  style={{
-                    backgroundColor: 'var(--accent-soft)',
-                    color: 'var(--accent-text)',
-                  }}
-                >
-                  <ShieldCheck className="h-3 w-3" />
-                  Ylläpitäjä
-                </span>
-                <span
-                  className="rounded-full px-2 py-0.5 text-[11px] font-bold"
-                  style={{
-                    backgroundColor: 'var(--bg-elevated)',
-                    color: 'var(--text-secondary)',
-                  }}
-                >
-                  {deletedSessions.length}
-                </span>
-              </div>
-              <p className="mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>
-                Palauta historiasta poistetut treenit ja kaikki niiden sarjat.
-              </p>
-            </div>
-
-            <div
-              className="flex shrink-0 items-center gap-1 text-xs font-bold"
-              style={{ color: 'var(--accent-text)' }}
-            >
-              <span>{showDeletedSessions ? 'Piilota' : 'Näytä'}</span>
-              {showDeletedSessions ? (
-                <ChevronUp className="h-4 w-4" />
-              ) : (
-                <ChevronDown className="h-4 w-4" />
-              )}
-            </div>
-          </button>
-
-          {showDeletedSessions && (
-            <div
-              className="mt-3.5 space-y-2.5 border-t pt-3.5"
-              style={{ borderColor: 'var(--border-subtle)' }}
-            >
-              {deletedSessions.map((session) => {
-                const sessionSets = snapshot.sets.filter((s) => s.sessionId === session.id);
-                const participants = session.participantIds
-                  .map((id) => lifterMap.get(id))
-                  .filter((l): l is NonNullable<typeof l> => Boolean(l));
-                const uniqueExercises = Array.from(
-                  new Set(
-                    sessionSets
-                      .map((s) => exerciseMap.get(s.exerciseId)?.name)
-                      .filter((n): n is string => Boolean(n)),
-                  ),
-                );
-
-                return (
-                  <div
-                    key={session.id}
-                    data-testid={`deleted-session-card-${session.id}`}
-                    className="bb-subcard flex items-center justify-between gap-3 p-3"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-sm font-extrabold">{session.sessionDate}</span>
-                        <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-                          {formatTimeShort(session.startedAt)}
-                        </span>
-                        <span
-                          className="rounded-full px-2 py-0.5 text-[10px] font-bold"
-                          style={{
-                            backgroundColor: 'var(--bg-surface)',
-                            color: 'var(--text-secondary)',
-                          }}
-                        >
-                          {sessionSets.length} {sessionSets.length === 1 ? 'sarja' : 'sarjaa'}
-                        </span>
-                      </div>
-
-                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                        {participants.map((p) => (
-                          <span
-                            key={p.id}
-                            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold"
-                            style={{
-                              backgroundColor: 'var(--bg-surface)',
-                              border: '1px solid var(--border-subtle)',
-                            }}
-                          >
-                            <span
-                              className="h-2 w-2 rounded-full"
-                              style={{ backgroundColor: p.avatarColor }}
-                            />
-                            {p.name}
-                          </span>
-                        ))}
-                      </div>
-
-                      {uniqueExercises.length > 0 && (
-                        <p
-                          className="mt-1 truncate text-[11px]"
-                          style={{ color: 'var(--text-muted)' }}
-                        >
-                          {uniqueExercises.join(' · ')}
-                        </p>
-                      )}
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        if (!mainUser) return;
-                        setDeleteError(null);
-                        try {
-                          await store.restoreSession(session.id, mainUser.id);
-                        } catch (err) {
-                          setDeleteError(
-                            err instanceof Error
-                              ? err.message
-                              : 'Treenin palauttaminen epäonnistui.',
-                          );
-                        }
-                      }}
-                      aria-label={`Palauta treeni ${session.sessionDate}`}
-                      className="bb-btn-primary flex shrink-0 items-center gap-1.5 px-3 py-2 text-xs"
-                    >
-                      <RotateCcw className="h-3.5 w-3.5" />
-                      <span>Palauta</span>
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
       )}
     </div>
   );
