@@ -20,6 +20,7 @@ import {
   formatHeroPhrase,
   isInclineDumbbellBenchExercise,
   pickRandomHeroPhraseTemplate,
+  sortExercisesAlphabetically,
 } from '../lib/finnish';
 import {
   formatSetLoad,
@@ -142,14 +143,19 @@ export function SessionTab() {
     return activeSessionForMainUser.participantIds[0] ?? '';
   }, [activeSessionForMainUser, mainUser, sessionDraft.lifterId]);
 
+  const sortedExercises = useMemo(
+    () => sortExercisesAlphabetically(snapshot.exercises),
+    [snapshot.exercises],
+  );
+
   const selectedExercise = useMemo(() => {
-    if (snapshot.exercises.length === 0) return undefined;
+    if (sortedExercises.length === 0) return undefined;
     if (sessionDraft.exerciseId) {
-      const found = snapshot.exercises.find((e) => e.id === sessionDraft.exerciseId);
+      const found = sortedExercises.find((e) => e.id === sessionDraft.exerciseId);
       if (found) return found;
     }
-    return snapshot.exercises[0];
-  }, [snapshot.exercises, sessionDraft.exerciseId]);
+    return sortedExercises[0];
+  }, [sortedExercises, sessionDraft.exerciseId]);
 
   const repsStops = useMemo(() => getRepsSliderStops(), []);
 
@@ -851,7 +857,7 @@ export function SessionTab() {
               onChange={(e) => handleSelectExercise(e.target.value)}
               className="bb-input w-full px-3.5 py-2.5 text-sm font-bold"
             >
-              {snapshot.exercises.map((ex) => (
+              {sortedExercises.map((ex) => (
                 <option key={ex.id} value={ex.id}>
                   {ex.name}
                 </option>

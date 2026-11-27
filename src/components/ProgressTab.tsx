@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Award, ChevronDown, ChevronUp, Info, TrendingUp } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { isBenchPressExercise } from '../lib/finnish';
+import { isBenchPressExercise, sortExercisesAlphabetically } from '../lib/finnish';
 import {
   computeProgressionByLifter,
   formatWeightNumber,
@@ -18,13 +18,18 @@ export function ProgressTab() {
   const [showOneRmInfo, setShowOneRmInfo] = useState<boolean>(false);
   const [visibleLifterIds, setVisibleLifterIds] = useState<string[]>([]);
 
+  const sortedExercises = useMemo(
+    () => sortExercisesAlphabetically(snapshot.exercises),
+    [snapshot.exercises],
+  );
+
   useEffect(() => {
-    if (snapshot.exercises.length === 0) return;
-    if (!selectedExerciseId || !snapshot.exercises.some((e) => e.id === selectedExerciseId)) {
-      const bench = snapshot.exercises.find((e) => isBenchPressExercise(e));
-      setSelectedExerciseId((bench ?? snapshot.exercises[0]).id);
+    if (sortedExercises.length === 0) return;
+    if (!selectedExerciseId || !sortedExercises.some((e) => e.id === selectedExerciseId)) {
+      const bench = sortedExercises.find((e) => isBenchPressExercise(e));
+      setSelectedExerciseId((bench ?? sortedExercises[0]).id);
     }
-  }, [snapshot.exercises, selectedExerciseId]);
+  }, [sortedExercises, selectedExerciseId]);
 
   useEffect(() => {
     setVisibleLifterIds((prev) => {
@@ -36,8 +41,8 @@ export function ProgressTab() {
   }, [snapshot.lifters]);
 
   const selectedExercise = useMemo(
-    () => snapshot.exercises.find((e) => e.id === selectedExerciseId) ?? snapshot.exercises[0],
-    [snapshot.exercises, selectedExerciseId],
+    () => sortedExercises.find((e) => e.id === selectedExerciseId) ?? sortedExercises[0],
+    [sortedExercises, selectedExerciseId],
   );
 
   const toggleLifterVisibility = (lifterId: string) => {
@@ -127,7 +132,7 @@ export function ProgressTab() {
             onChange={(e) => setSelectedExerciseId(e.target.value)}
             className="bb-input w-full px-3.5 py-2.5 text-sm font-bold"
           >
-            {snapshot.exercises.map((ex) => (
+            {sortedExercises.map((ex) => (
               <option key={ex.id} value={ex.id}>
                 {ex.name}
               </option>
@@ -394,7 +399,11 @@ export function ProgressTab() {
       <section className="bb-widget p-4">
         <div className="mb-3 flex items-center gap-2">
           <Award className="h-4 w-4" style={{ color: 'var(--accent-text)' }} />
-          <h3 className="text-sm font-extrabold">Porukan omat ennätykset</h3>
+          <h3 className="text-sm font-extrabold">
+            {showWeightedMetricToggle && weightedMetric === 'e1rm'
+              ? 'Porukan arvioidut ykkösmaksimit'
+              : 'Porukan omat ennätykset'}
+          </h3>
         </div>
 
         <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">

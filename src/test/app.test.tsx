@@ -33,11 +33,11 @@ describe('Barbell Buddy PWA (Suomi)', () => {
     expect(snap.lifters.find((l) => l.name === 'Julie')?.avatarColor).toBe('#ec4899');
     expect(snap.lifters.find((l) => l.name === 'Joel')?.isAdmin).toBe(true);
     expect(snap.exercises.map((e) => e.name)).toEqual([
+      'Kyykky',
       'Leuanveto',
+      'Maastaveto',
       'Penkkipunnerrus',
       'Vinopenkki käsipainoilla',
-      'Maastaveto',
-      'Kyykky',
     ]);
 
     // Legacy localStorage store with red Julie (#f43f5e) and without Tuomas auto-migrates once
@@ -361,6 +361,9 @@ describe('Barbell Buddy PWA (Suomi)', () => {
     await user.click(await screen.findByRole('button', { name: /Uusi treeni/i }));
     await user.click(screen.getByRole('button', { name: /Aloita treeni/i }));
 
+    // Exercises are ordered alphabetically, so Kyykky is first; select Leuanveto to test pull-up wheel stops
+    expect(screen.getByLabelText('Liike')).toHaveValue('ex-squat');
+    await user.selectOptions(screen.getByLabelText('Liike'), 'ex-pullups');
     expect(screen.getByLabelText('Liike')).toHaveValue('ex-pullups');
 
     // Info range widgets ("1–30", "Kumi–+30") are dropped
@@ -770,6 +773,9 @@ describe('Barbell Buddy PWA (Suomi)', () => {
     await user.click(await screen.findByRole('button', { name: /Uusi treeni/i }));
     await user.click(screen.getByRole('button', { name: /Julie/i }));
     await user.click(screen.getByRole('button', { name: /Aloita treeni \(2\)/i }));
+
+    expect(screen.getByLabelText('Liike')).toHaveValue('ex-squat');
+    await user.selectOptions(screen.getByLabelText('Liike'), 'ex-pullups');
 
     const repsSlider = screen.getByRole('slider', { name: 'Toistot' });
     const weightSlider = screen.getByRole('slider', { name: 'Paino' });
@@ -1410,6 +1416,110 @@ describe('Barbell Buddy PWA (Suomi)', () => {
     await user.click(histCard);
     expect(await screen.findByText(/102\.5 kg × 5 toistoa/i)).toBeInTheDocument();
     expect(screen.getByText(/45 kg × 8 toistoa/i)).toBeInTheDocument();
+
+    store.dispose();
+  });
+
+  it('orders exercises alphabetically (Finnish A–Ö) across Treeni, Kehitys, and Asetukset and switches Kehitys PR heading for Arvioitu 1RM', async () => {
+    const user = userEvent.setup();
+    const store = new LocalRealtimeStore({ storageKey: 'test-alpha-and-e1rm-heading' });
+    await store.initialize();
+
+    await store.addExercise({ name: 'Ylätalja', category: 'machine' });
+    await store.addExercise({ name: 'Alatalja', category: 'machine' });
+    await store.addExercise({ name: 'Äärikyykky', category: 'barbell' });
+
+    const expectedOrder = [
+      'Alatalja',
+      'Kyykky',
+      'Leuanveto',
+      'Maastaveto',
+      'Penkkipunnerrus',
+      'Vinopenkki käsipainoilla',
+      'Ylätalja',
+      'Äärikyykky',
+    ];
+
+    expect(store.getSnapshot().exercises.map((e) => e.name)).toEqual(expectedOrder);
+
+    localStorage.setItem('alpha-user', 'lifter-julie');
+    render(<App store={store} mainUserStorageKey="alpha-user" />);
+
+    // 1. Treeni exercise select options are strictly alphabetical (A–Ö)
+    await user.click(await screen.findByRole('button', { name: /Uusi treeni/i }));
+    await user.click(screen.getByRole('button', { name: /Aloita treeni/i }));
+    const sessionSelect = screen.getByLabelText('Liike');
+    const sessionOptionLabels = within(sessionSelect)
+      .getAllByRole('option')
+      .map((opt) => opt.textContent);
+    expect(sessionOptionLabels).toEqual(expectedOrder);
+
+    // 2. Kehitys exercise select options are strictly alphabetical AND PR heading toggles on Arvioitu 1RM
+    await user.click(screen.getByRole('tab', { name: /Kehitys/i }));
+    const progressSelect = await screen.findByLabelText('Kehityksen liike');
+    const progressOptionLabels = within(progressSelect)
+      .getAllByRole('option')
+      .map((opt) => opt.textContent);
+    expect(progressOptionLabels).toEqual(expectedOrder);
+
+    // Default metric ("Maksimipaino") shows "Porukan omat ennätykset"
+    expect(
+      screen.getByRole('heading', { name: 'Porukan omat ennätykset' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'Porukan arvioidut ykkösmaksimit' }),
+    ).not.toBeInTheDocument();
+
+    // Selecting "Arvioitu 1RM" changes heading to "Porukan arvioidut ykkösmaksimit"
+    await user.click(screen.getByRole('button', { name: /Arvioitu 1RM/i }));
+    expect(
+      screen.getByRole('heading', { name: 'Porukan arvioidut ykkösmaksimit' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'Porukan omat ennätykset' }),
+    ).not.toBeInTheDocument();
+
+    // Switching to Leuanveto (Kehonpaino mode, where 1RM does not apply) shows "Porukan omat ennätykset",
+    // while switching Leuanveto to "+ Kilot" restores "Porukan arvioidut ykkösmaksimit"
+    await user.selectOptions(progressSelect, 'ex-pullups');
+    expect(
+      screen.getByRole('heading', { name: 'Porukan omat ennätykset' }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '+ Kilot' }));
+    expect(
+      screen.getByRole('heading', { name: 'Porukan arvioidut ykkösmaksimit' }),
+    ).toBeInTheDocument();
+
+    // Selecting "Maksimipaino" switches back to "Porukan omat ennätykset"
+    await user.click(screen.getByRole('button', { name: /Maksimipaino/i }));
+    expect(
+      screen.getByRole('heading', { name: 'Porukan omat ennätykset' }),
+    ).toBeInTheDocument();
+
+    // 3. Asetukset "Hallitse liikkeitä" list is also ordered alphabetically, including after renaming
+    await user.click(screen.getByRole('tab', { name: /Asetukset/i }));
+    const settingsList = await screen.findByTestId('settings-exercises-list');
+    const getSettingsExerciseNames = () =>
+      Array.from(settingsList.querySelectorAll('.truncate.text-sm.font-bold')).map(
+        (el) => el.textContent,
+      );
+    expect(getSettingsExerciseNames()).toEqual(expectedOrder);
+
+    // Rename "Ylätalja" -> "B-talja" as admin Joel and confirm it re-sorts right after "Alatalja"
+    const ylatalja = store.getSnapshot().exercises.find((e) => e.name === 'Ylätalja')!;
+    await act(async () => {
+      await store.renameExercise(ylatalja.id, 'B-talja', 'lifter-joel');
+    });
+    expect(getSettingsExerciseNames()).toEqual([
+      'Alatalja',
+      'B-talja',
+      'Kyykky',
+      'Leuanveto',
+      'Maastaveto',
+      'Penkkipunnerrus',
+      'Vinopenkki käsipainoilla',
+      'Äärikyykky',
+    ]);
 
     store.dispose();
   });

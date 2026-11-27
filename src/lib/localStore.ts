@@ -12,7 +12,11 @@ import type {
 } from '../types/models';
 import { verifyAdminPinHash } from './adminAuth';
 import { computeSessionExpiryIso, formatLocalDate, isSessionActiveAt } from './dates';
-import { localizeExercise, localizeExerciseName } from './finnish';
+import {
+  compareExercisesAlphabetically,
+  localizeExercise,
+  localizeExerciseName,
+} from './finnish';
 import { normalizeAndValidateSet } from './metrics';
 import { STARTER_EXERCISES, STARTER_LIFTERS } from './seedData';
 
@@ -150,7 +154,7 @@ export class LocalRealtimeStore implements DataStore {
     const sortedExercises = data.exercises
       .filter((e) => !e.deletedAt)
       .map((e) => localizeExercise(e))
-      .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, 'fi'));
+      .sort(compareExercisesAlphabetically);
     const activeExerciseIds = new Set(sortedExercises.map((e) => e.id));
 
     const sortedSessions = data.sessions

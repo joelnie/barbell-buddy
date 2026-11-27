@@ -69,6 +69,22 @@ export function localizeExercise(exercise: Exercise): Exercise {
   };
 }
 
+export function compareExercisesAlphabetically(
+  a: Pick<Exercise, 'id' | 'name'>,
+  b: Pick<Exercise, 'id' | 'name'>,
+): number {
+  return (
+    a.name.localeCompare(b.name, 'fi', { sensitivity: 'base' }) ||
+    a.id.localeCompare(b.id)
+  );
+}
+
+export function sortExercisesAlphabetically<T extends Pick<Exercise, 'id' | 'name'>>(
+  exercises: readonly T[],
+): T[] {
+  return [...exercises].sort(compareExercisesAlphabetically);
+}
+
 type ExerciseIdentity = Pick<Exercise, 'id' | 'name'> &
   Partial<Pick<Exercise, 'isBuiltin' | 'sortOrder'>>;
 
