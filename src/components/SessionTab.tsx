@@ -17,6 +17,7 @@ import {
 import { useApp } from '../context/AppContext';
 import { formatLocalDate, isSessionActiveAt } from '../lib/dates';
 import {
+  findDefaultSessionExercise,
   formatHeroPhrase,
   isInclineDumbbellBenchExercise,
   pickRandomHeroPhraseTemplate,
@@ -126,12 +127,17 @@ export function SessionTab() {
     }
   }, [mainUser?.id, activeSessionForMainUser?.id]);
 
+  const hasDraftForActiveSession = Boolean(
+    activeSessionForMainUser && sessionDraft.sessionId === activeSessionForMainUser.id,
+  );
+
   // Resolve active logging lifter synchronously so first render never flashes empty selection
   const effectiveLifterId = useMemo(() => {
     if (!activeSessionForMainUser) {
       return mainUser?.id ?? '';
     }
     if (
+      hasDraftForActiveSession &&
       sessionDraft.lifterId &&
       activeSessionForMainUser.participantIds.includes(sessionDraft.lifterId)
     ) {
@@ -141,7 +147,7 @@ export function SessionTab() {
       return mainUser.id;
     }
     return activeSessionForMainUser.participantIds[0] ?? '';
-  }, [activeSessionForMainUser, mainUser, sessionDraft.lifterId]);
+  }, [activeSessionForMainUser, hasDraftForActiveSession, mainUser, sessionDraft.lifterId]);
 
   const sortedExercises = useMemo(
     () => sortExercisesAlphabetically(snapshot.exercises),
@@ -150,12 +156,12 @@ export function SessionTab() {
 
   const selectedExercise = useMemo(() => {
     if (sortedExercises.length === 0) return undefined;
-    if (sessionDraft.exerciseId) {
+    if (hasDraftForActiveSession && sessionDraft.exerciseId) {
       const found = sortedExercises.find((e) => e.id === sessionDraft.exerciseId);
       if (found) return found;
     }
-    return sortedExercises[0];
-  }, [sortedExercises, sessionDraft.exerciseId]);
+    return findDefaultSessionExercise(sortedExercises);
+  }, [sortedExercises, hasDraftForActiveSession, sessionDraft.exerciseId]);
 
   const repsStops = useMemo(() => getRepsSliderStops(), []);
 
@@ -189,8 +195,8 @@ export function SessionTab() {
   );
 
   const currentDraftKey =
-    selectedExercise && effectiveLifterId
-      ? `${activeSessionForMainUser?.id ?? 'idle'}:${effectiveLifterId}:${selectedExercise.id}`
+    activeSessionForMainUser && selectedExercise && effectiveLifterId
+      ? `${activeSessionForMainUser.id}:${effectiveLifterId}:${selectedExercise.id}`
       : '';
 
   const isDraftInitializedForCurrent =
@@ -289,16 +295,20 @@ export function SessionTab() {
   };
 
   const handleSelectLifter = (lifterId: string) => {
+    if (!activeSessionForMainUser) return;
     setSessionDraft((prev) => ({
       ...prev,
+      sessionId: activeSessionForMainUser.id,
       lifterId,
       customized: false,
     }));
   };
 
   const handleSelectExercise = (exerciseId: string) => {
+    if (!activeSessionForMainUser) return;
     setSessionDraft((prev) => ({
       ...prev,
+      sessionId: activeSessionForMainUser.id,
       exerciseId,
       customized: false,
     }));
