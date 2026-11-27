@@ -14,7 +14,7 @@
   - Aloitusnäkymässä vaihtuu 22 motivoivaa suomenkielistä treenilausetta (mukaan lukien käyttäjän nimellä personoidut tervehdykset).
 - **Starter & Custom Exercises with Dual Vertical Sliders**:
   - **Left Vertical Slider**: **Toistot** (`1`–`20`) with smooth wheel scrolling and `+` / `−` precision steppers.
-  - **Right Vertical Slider**: Exercise-tailored discrete weight stops — **Leuanveto** (`Kuminauha`, `Kehonpaino`, `+2.5` to `+30 kg`, never negative weight), **Penkkipunnerrus** (`20`–`120 kg` by `2.5`), **Kyykky** (`20`–`150 kg` by `2.5`), **Maastaveto** (`25`–`180 kg` by `2.5`), **Vinopenkki käsipainoilla** (`Paino (x2)`, `8, 9, 10, 12, …, 40 kg`), plus custom exercises added in-app.
+  - **Right Vertical Slider**: Exercise-tailored discrete weight stops — **Leuanveto** (`Kuminauha`, `Kehonpaino`, `+2.5` to `+30 kg`, never negative weight), **Penkkipunnerrus** (`20`–`120 kg` by `2.5`), **Kyykky** (`20`–`150 kg` by `2.5`), **Maastaveto** (`25`–`180 kg` by `2.5`), **Käsipaino (x2) / Vinopenkki käsipainoilla** (`Paino (x2)`, `8, 9, 10, 12, …, 40 kg`), **Käsipaino (x1)** (`Paino`, `1, 2, …, 10, 12, …, 40 kg`), and **Laite / Talja** (`2.5`–`120 kg` by `2.5`).
 - **Participant-Scoped Live Sessions, Parallel Workouts & Live Read-Only Inspection**:
   - Sessions are named by date (`YYYY-MM-DD`).
   - Tap **Uusi treeni** and select who is lifting together. Only selected participants can log or edit sets in that session—allowing other lifters to run separate sessions on the very same day—while non-participants can follow ongoing workouts live in read-only mode (**Käynnissä nyt**) inside the **Treeni** tab.

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Award, TrendingUp } from 'lucide-react';
+import { Award, ChevronDown, ChevronUp, Info, TrendingUp } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { isBenchPressExercise } from '../lib/finnish';
 import {
@@ -15,6 +15,7 @@ export function ProgressTab() {
   const [selectedExerciseId, setSelectedExerciseId] = useState<string>('');
   const [pullupMode, setPullupMode] = useState<PullupMode>('bodyweight');
   const [weightedMetric, setWeightedMetric] = useState<WeightedProgressMetric>('topWeight');
+  const [showOneRmInfo, setShowOneRmInfo] = useState<boolean>(false);
   const [visibleLifterIds, setVisibleLifterIds] = useState<string[]>([]);
 
   useEffect(() => {
@@ -159,27 +160,82 @@ export function ProgressTab() {
         )}
 
         {showWeightedMetricToggle && (
-          <div className="grid grid-cols-2 gap-2" role="group" aria-label="Kehitysmittari">
-            <button
-              type="button"
-              aria-pressed={weightedMetric === 'topWeight'}
-              onClick={() => setWeightedMetric('topWeight')}
-              className={`rounded-xl py-2 text-xs font-bold transition ${
-                weightedMetric === 'topWeight' ? 'bb-pill-active' : 'bb-pill-idle'
-              }`}
-            >
-              Maksimipaino ({progression.yAxisUnit})
-            </button>
-            <button
-              type="button"
-              aria-pressed={weightedMetric === 'e1rm'}
-              onClick={() => setWeightedMetric('e1rm')}
-              className={`rounded-xl py-2 text-xs font-bold transition ${
-                weightedMetric === 'e1rm' ? 'bb-pill-active' : 'bb-pill-idle'
-              }`}
-            >
-              Arvioitu 1RM ({progression.yAxisUnit})
-            </button>
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2" role="group" aria-label="Kehitysmittari">
+              <button
+                type="button"
+                aria-pressed={weightedMetric === 'topWeight'}
+                onClick={() => {
+                  setWeightedMetric('topWeight');
+                  setShowOneRmInfo(false);
+                }}
+                className={`rounded-xl py-2 text-xs font-bold transition ${
+                  weightedMetric === 'topWeight' ? 'bb-pill-active' : 'bb-pill-idle'
+                }`}
+              >
+                Maksimipaino ({progression.yAxisUnit})
+              </button>
+              <button
+                type="button"
+                aria-pressed={weightedMetric === 'e1rm'}
+                onClick={() => setWeightedMetric('e1rm')}
+                className={`rounded-xl py-2 text-xs font-bold transition ${
+                  weightedMetric === 'e1rm' ? 'bb-pill-active' : 'bb-pill-idle'
+                }`}
+              >
+                Arvioitu 1RM ({progression.yAxisUnit})
+              </button>
+            </div>
+
+            {weightedMetric === 'e1rm' && (
+              <div data-testid="e1rm-info-dropdown" className="bb-subcard px-3 py-2.5">
+                <button
+                  type="button"
+                  aria-expanded={showOneRmInfo}
+                  onClick={() => setShowOneRmInfo((prev) => !prev)}
+                  className="flex w-full items-center justify-between gap-2 text-left text-xs font-bold transition hover:opacity-95"
+                  style={{ color: 'var(--accent-text)' }}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <Info className="h-3.5 w-3.5 shrink-0" />
+                    <span>Miten Arvioitu 1RM lasketaan?</span>
+                  </span>
+                  {showOneRmInfo ? (
+                    <ChevronUp className="h-4 w-4 shrink-0" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 shrink-0" />
+                  )}
+                </button>
+
+                {showOneRmInfo && (
+                  <div
+                    className="mt-2 space-y-1.5 border-t pt-2 text-xs leading-relaxed"
+                    style={{
+                      borderColor: 'var(--border-subtle)',
+                      color: 'var(--text-secondary)',
+                    }}
+                  >
+                    <p>
+                      Arvioitu yhden toiston maksimi (<strong>1RM</strong>) lasketaan{' '}
+                      <strong>Epleyn kaavalla</strong>:
+                    </p>
+                    <p
+                      className="rounded-lg px-2.5 py-1.5 font-mono text-[11px] font-bold"
+                      style={{
+                        backgroundColor: 'var(--bg-surface)',
+                        color: 'var(--accent-text)',
+                      }}
+                    >
+                      Arvioitu 1RM = paino × (1 + toistot / 30)
+                    </p>
+                    <p style={{ color: 'var(--text-muted)' }}>
+                      Esimerkki: 80 kg × 8 toistoa → 80 × (1 + 8 / 30) ≈ 101,3 kg. Yhden toiston
+                      sarjassa (1 toisto) tulos on suoraan nostettu paino.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 

@@ -25,6 +25,7 @@ interface PersistedLocalData {
   sessions: WorkoutSession[];
   sets: WorkoutSet[];
   migratedV2?: boolean;
+  migratedV3?: boolean;
 }
 
 function generateId(prefix: string): string {
@@ -36,11 +37,12 @@ function generateId(prefix: string): string {
 
 function createInitialPersistedData(): PersistedLocalData {
   return {
-    lifters: STARTER_LIFTERS.map((l) => ({ ...l })),
-    exercises: STARTER_EXERCISES.map((e) => ({ ...e })),
+    lifters: STARTER_LIFTERS.map((l) => ({ ...l, deletedAt: null })),
+    exercises: STARTER_EXERCISES.map((e) => ({ ...e, deletedAt: null })),
     sessions: [],
     sets: [],
     migratedV2: true,
+    migratedV3: true,
   };
 }
 
@@ -77,38 +79,58 @@ export class LocalRealtimeStore implements DataStore {
       const parsed = JSON.parse(raw) as Partial<PersistedLocalData>;
       let lifters =
         Array.isArray(parsed.lifters) && parsed.lifters.length > 0
-          ? parsed.lifters.map((l) =>
-              l.name.trim().toLowerCase() === 'julie' && l.avatarColor === '#f43f5e'
-                ? { ...l, avatarColor: '#ec4899' }
-                : l,
-            )
+          ? parsed.lifters.map((l) => ({
+              ...l,
+              avatarColor:
+                l.name.trim().toLowerCase() === 'julie' && l.avatarColor === '#f43f5e'
+                  ? '#ec4899'
+                  : l.avatarColor,
+              deletedAt: l.deletedAt ?? null,
+            }))
           : createInitialPersistedData().lifters;
 
+      let exercises =
+        Array.isArray(parsed.exercises) && parsed.exercises.length > 0
+          ? parsed.exercises.map((e) => ({
+              ...e,
+              deletedAt: e.deletedAt ?? null,
+            }))
+          : createInitialPersistedData().exercises;
+
       let migratedV2 = Boolean(parsed.migratedV2);
+      let migratedV3 = Boolean(parsed.migratedV3);
       let didMigrate = false;
 
       if (!migratedV2) {
         if (!lifters.some((l) => l.name.trim().toLowerCase() === 'tuomas')) {
           const tuomasSeed = STARTER_LIFTERS.find((l) => l.id === 'lifter-tuomas');
           if (tuomasSeed) {
-            lifters = [...lifters, { ...tuomasSeed }];
+            lifters = [...lifters, { ...tuomasSeed, deletedAt: null }];
           }
         }
         migratedV2 = true;
         didMigrate = true;
       }
 
+      if (!migratedV3) {
+        exercises = exercises.map((e) =>
+          e.name.trim().toLowerCase() === 'yliveto'
+            ? { ...e, category: 'dumbbell_single' as const }
+            : e,
+        );
+        migratedV3 = true;
+        didMigrate = true;
+      }
+
       const normalizedData: PersistedLocalData = {
         lifters,
-        exercises:
-          Array.isArray(parsed.exercises) && parsed.exercises.length > 0
-            ? parsed.exercises
-            : createInitialPersistedData().exercises,
+        exercises,
         sessions: Array.isArray(parsed.sessions)
           ? parsed.sessions.map((s) => ({ ...s, deletedAt: s.deletedAt ?? null }))
           : [],
         sets: Array.isArray(parsed.sets) ? parsed.sets : [],
         migratedV2,
+        migratedV3,
       };
 
       if (didMigrate) {
@@ -122,16 +144,31 @@ export class LocalRealtimeStore implements DataStore {
   }
 
   private buildSnapshot(data: PersistedLocalData): StoreSnapshot {
+    const activeLifters = data.lifters.filter((l) => !l.deletedAt);
+    const activeLifterIds = new Set(activeLifters.map((l) => l.id));
+
     const sortedExercises = data.exercises
+      .filter((e) => !e.deletedAt)
       .map((e) => localizeExercise(e))
       .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, 'fi'));
-    const sortedSessions = [...data.sessions].sort(
-      (a, b) => b.sessionDate.localeCompare(a.sessionDate) || b.startedAt.localeCompare(a.startedAt),
-    );
-    const sortedSets = [...data.sets].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    const activeExerciseIds = new Set(sortedExercises.map((e) => e.id));
+
+    const sortedSessions = data.sessions
+      .map((s) => ({
+        ...s,
+        participantIds: s.participantIds.filter((id) => activeLifterIds.has(id)),
+      }))
+      .filter((s) => s.participantIds.length > 0)
+      .sort(
+        (a, b) => b.sessionDate.localeCompare(a.sessionDate) || b.startedAt.localeCompare(a.startedAt),
+      );
+
+    const sortedSets = data.sets
+      .filter((s) => activeLifterIds.has(s.lifterId) && activeExerciseIds.has(s.exerciseId))
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 
     return {
-      lifters: [...data.lifters],
+      lifters: [...activeLifters],
       exercises: sortedExercises,
       sessions: sortedSessions,
       sets: sortedSets,
@@ -238,7 +275,7 @@ export class LocalRealtimeStore implements DataStore {
     }
 
     for (const pid of uniqueParticipants) {
-      if (!data.lifters.some((l) => l.id === pid)) {
+      if (!data.lifters.some((l) => !l.deletedAt && l.id === pid)) {
         throw new Error('Tuntematon treenaaja valittu.');
       }
       const alreadyActive = data.sessions.find(
@@ -282,7 +319,7 @@ export class LocalRealtimeStore implements DataStore {
     if (!target || !isSessionActiveAt(target, now)) {
       throw new Error('Tämä treeni ei ole enää käynnissä.');
     }
-    if (!data.lifters.some((l) => l.id === lifterId)) {
+    if (!data.lifters.some((l) => !l.deletedAt && l.id === lifterId)) {
       throw new Error('Treenaajaa ei löytynyt.');
     }
     if (target.participantIds.includes(lifterId)) {
@@ -358,7 +395,7 @@ export class LocalRealtimeStore implements DataStore {
 
   async restoreSession(sessionId: string, actingLifterId: string): Promise<void> {
     const data = this.readFromStorage();
-    const actor = data.lifters.find((l) => l.id === actingLifterId);
+    const actor = data.lifters.find((l) => !l.deletedAt && l.id === actingLifterId);
     if (!actor?.isAdmin) {
       throw new Error('Vain Joel (ylläpitäjä) voi palauttaa poistettuja treenejä.');
     }
@@ -399,7 +436,7 @@ export class LocalRealtimeStore implements DataStore {
       throw new Error('Vain treenin osallistujat voivat lisätä siihen sarjoja.');
     }
 
-    const exercise = data.exercises.find((e) => e.id === input.exerciseId);
+    const exercise = data.exercises.find((e) => !e.deletedAt && e.id === input.exerciseId);
     if (!exercise) {
       throw new Error('Liikettä ei löytynyt.');
     }
@@ -476,8 +513,33 @@ export class LocalRealtimeStore implements DataStore {
       throw new Error('Anna uuden käyttäjän nimi.');
     }
     const data = this.readFromStorage();
-    if (data.lifters.some((l) => l.name.toLowerCase() === trimmed.toLowerCase())) {
+    const trimmedLower = trimmed.toLowerCase();
+
+    if (
+      data.lifters.some(
+        (l) => !l.deletedAt && l.name.trim().toLowerCase() === trimmedLower,
+      )
+    ) {
       throw new Error(`Käyttäjä nimeltä "${trimmed}" on jo olemassa.`);
+    }
+
+    const softDeletedMatches = data.lifters
+      .filter((l) => Boolean(l.deletedAt) && l.name.trim().toLowerCase() === trimmedLower)
+      .sort((a, b) => (b.deletedAt ?? '').localeCompare(a.deletedAt ?? ''));
+
+    if (softDeletedMatches.length > 0) {
+      const targetToRestore = softDeletedMatches[0];
+      const restored: Lifter = {
+        ...targetToRestore,
+        name: trimmed,
+        avatarColor: input.avatarColor || targetToRestore.avatarColor,
+        deletedAt: null,
+      };
+      this.persistAndBroadcast({
+        ...data,
+        lifters: data.lifters.map((l) => (l.id === restored.id ? restored : l)),
+      });
+      return restored;
     }
 
     const created: Lifter = {
@@ -486,6 +548,7 @@ export class LocalRealtimeStore implements DataStore {
       avatarColor: input.avatarColor || '#10b981',
       isAdmin: false,
       createdAt: new Date().toISOString(),
+      deletedAt: null,
     };
 
     this.persistAndBroadcast({
@@ -498,14 +561,14 @@ export class LocalRealtimeStore implements DataStore {
 
   async deleteLifter(targetLifterId: string, actingLifterId: string): Promise<void> {
     const data = this.readFromStorage();
-    const actor = data.lifters.find((l) => l.id === actingLifterId);
+    const actor = data.lifters.find((l) => !l.deletedAt && l.id === actingLifterId);
     if (!actor?.isAdmin) {
       throw new Error('Vain Joel (ylläpitäjä) voi poistaa käyttäjiä.');
     }
     if (targetLifterId === actingLifterId) {
       throw new Error('Joel ei voi poistaa omaa ylläpitäjätiliään.');
     }
-    const target = data.lifters.find((l) => l.id === targetLifterId);
+    const target = data.lifters.find((l) => !l.deletedAt && l.id === targetLifterId);
     if (!target) {
       throw new Error('Käyttäjää ei löytynyt.');
     }
@@ -513,29 +576,12 @@ export class LocalRealtimeStore implements DataStore {
       throw new Error('Ylläpitäjää ei voi poistaa.');
     }
 
-    const updatedSessions = data.sessions
-      .map((s) => {
-        const remaining = s.participantIds.filter((id) => id !== targetLifterId);
-        return {
-          ...s,
-          createdBy: s.createdBy === targetLifterId ? null : s.createdBy,
-          participantIds: remaining,
-          status: remaining.length === 0 ? ('completed' as const) : s.status,
-          endedAt:
-            remaining.length === 0 && !s.endedAt ? new Date().toISOString() : s.endedAt,
-        };
-      })
-      .filter((s) => s.participantIds.length > 0 || data.sets.some((set) => set.sessionId === s.id && set.lifterId !== targetLifterId));
-
-    const updatedSets = data.sets
-      .filter((s) => s.lifterId !== targetLifterId)
-      .map((s) => (s.loggedBy === targetLifterId ? { ...s, loggedBy: null } : s));
-
+    const nowIso = new Date().toISOString();
     this.persistAndBroadcast({
       ...data,
-      lifters: data.lifters.filter((l) => l.id !== targetLifterId),
-      sessions: updatedSessions,
-      sets: updatedSets,
+      lifters: data.lifters.map((l) =>
+        l.id === targetLifterId ? { ...l, deletedAt: nowIso } : l,
+      ),
     });
   }
 
@@ -545,25 +591,54 @@ export class LocalRealtimeStore implements DataStore {
       throw new Error('Anna liikkeen nimi.');
     }
     const data = this.readFromStorage();
-    const candidateNormalized = localizeExerciseName(trimmed).toLowerCase();
+    const localizedTrimmed = localizeExerciseName(trimmed);
+    const candidateLower = trimmed.toLowerCase();
+    const candidateNormalized = localizedTrimmed.toLowerCase();
+
     if (
       data.exercises.some(
         (e) =>
-          e.name.toLowerCase() === trimmed.toLowerCase() ||
-          localizeExerciseName(e.name).toLowerCase() === candidateNormalized,
+          !e.deletedAt &&
+          (e.name.trim().toLowerCase() === candidateLower ||
+            localizeExerciseName(e.name).toLowerCase() === candidateNormalized),
       )
     ) {
       throw new Error(`Liike "${trimmed}" on jo olemassa.`);
     }
 
+    const softDeletedMatches = data.exercises
+      .filter(
+        (e) =>
+          Boolean(e.deletedAt) &&
+          e.category === input.category &&
+          (e.name.trim().toLowerCase() === candidateLower ||
+            localizeExerciseName(e.name).toLowerCase() === candidateNormalized),
+      )
+      .sort((a, b) => (b.deletedAt ?? '').localeCompare(a.deletedAt ?? ''));
+
+    if (softDeletedMatches.length > 0) {
+      const targetToRestore = softDeletedMatches[0];
+      const restored: Exercise = {
+        ...targetToRestore,
+        name: localizedTrimmed,
+        deletedAt: null,
+      };
+      this.persistAndBroadcast({
+        ...data,
+        exercises: data.exercises.map((e) => (e.id === restored.id ? restored : e)),
+      });
+      return localizeExercise(restored);
+    }
+
     const maxSort = data.exercises.reduce((max, e) => Math.max(max, e.sortOrder), 0);
     const created: Exercise = {
       id: generateId('ex'),
-      name: localizeExerciseName(trimmed),
+      name: localizedTrimmed,
       category: input.category,
       isBuiltin: false,
       sortOrder: maxSort + 1,
       createdAt: new Date().toISOString(),
+      deletedAt: null,
     };
 
     this.persistAndBroadcast({
@@ -580,7 +655,7 @@ export class LocalRealtimeStore implements DataStore {
     actingLifterId: string,
   ): Promise<Exercise> {
     const data = this.readFromStorage();
-    const actor = data.lifters.find((l) => l.id === actingLifterId);
+    const actor = data.lifters.find((l) => !l.deletedAt && l.id === actingLifterId);
     if (!actor?.isAdmin) {
       throw new Error('Vain Joel (ylläpitäjä) voi muokata liikkeiden nimiä.');
     }
@@ -590,7 +665,7 @@ export class LocalRealtimeStore implements DataStore {
       throw new Error('Anna liikkeen nimi.');
     }
 
-    const existing = data.exercises.find((e) => e.id === targetExerciseId);
+    const existing = data.exercises.find((e) => !e.deletedAt && e.id === targetExerciseId);
     if (!existing) {
       throw new Error('Liikettä ei löytynyt.');
     }
@@ -599,6 +674,7 @@ export class LocalRealtimeStore implements DataStore {
     if (
       data.exercises.some(
         (e) =>
+          !e.deletedAt &&
           e.id !== targetExerciseId &&
           (e.name.trim().toLowerCase() === candidateLower ||
             localizeExerciseName(e.name).toLowerCase() === candidateLower),
@@ -622,18 +698,20 @@ export class LocalRealtimeStore implements DataStore {
 
   async deleteExercise(targetExerciseId: string, actingLifterId: string): Promise<void> {
     const data = this.readFromStorage();
-    const actor = data.lifters.find((l) => l.id === actingLifterId);
+    const actor = data.lifters.find((l) => !l.deletedAt && l.id === actingLifterId);
     if (!actor?.isAdmin) {
       throw new Error('Vain Joel (ylläpitäjä) voi poistaa liikkeitä.');
     }
-    if (!data.exercises.some((e) => e.id === targetExerciseId)) {
+    if (!data.exercises.some((e) => !e.deletedAt && e.id === targetExerciseId)) {
       throw new Error('Liikettä ei löytynyt.');
     }
 
+    const nowIso = new Date().toISOString();
     this.persistAndBroadcast({
       ...data,
-      exercises: data.exercises.filter((e) => e.id !== targetExerciseId),
-      sets: data.sets.filter((s) => s.exerciseId !== targetExerciseId),
+      exercises: data.exercises.map((e) =>
+        e.id === targetExerciseId ? { ...e, deletedAt: nowIso } : e,
+      ),
     });
   }
 
