@@ -26,6 +26,7 @@ interface AppContextValue {
   isReady: boolean;
   mainUser: Lifter | null;
   activeSessionForMainUser: WorkoutSession | null;
+  otherActiveSessions: WorkoutSession[];
   completedSessions: WorkoutSession[];
   pendingAdminTarget: Lifter | null;
   requestSwitchMainUser: (lifter: Lifter) => void;
@@ -200,6 +201,14 @@ export function AppProvider({
     );
   }, [mainUser, snapshot.sessions]);
 
+  const otherActiveSessions = useMemo(() => {
+    if (!mainUser) return [];
+    const now = new Date();
+    return snapshot.sessions.filter(
+      (s) => isSessionActiveAt(s, now) && !s.participantIds.includes(mainUser.id),
+    );
+  }, [mainUser, snapshot.sessions]);
+
   const completedSessions = useMemo(() => {
     const now = new Date();
     return snapshot.sessions.filter((s) => !isSessionActiveAt(s, now));
@@ -212,6 +221,7 @@ export function AppProvider({
       isReady,
       mainUser,
       activeSessionForMainUser,
+      otherActiveSessions,
       completedSessions,
       pendingAdminTarget,
       requestSwitchMainUser,
@@ -224,6 +234,7 @@ export function AppProvider({
       isReady,
       mainUser,
       activeSessionForMainUser,
+      otherActiveSessions,
       completedSessions,
       pendingAdminTarget,
       requestSwitchMainUser,

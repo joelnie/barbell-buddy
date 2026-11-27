@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import App from '../App';
 import { LocalRealtimeStore } from '../lib/localStore';
-import { computeSessionExpiryIso } from '../lib/dates';
+import { computeSessionExpiryIso, formatLocalDate } from '../lib/dates';
 import {
   FINNISH_HERO_PHRASE_TEMPLATES,
   formatHeroPhrase,
@@ -141,12 +141,12 @@ describe('Barbell Buddy PWA (Suomi)', () => {
       storeJulie.initialize(),
     ]);
 
-    // Joel starts a session for Joel + Leevi (excluding Julie) on 2026-11-24
+    // Joel starts a session for Joel + Leevi (excluding Julie) today
+    const today = formatLocalDate();
     const sessionJoelLeevi = await storeJoel.createSession({
       createdBy: 'lifter-joel',
       participantIds: ['lifter-joel', 'lifter-leevi'],
-      sessionDate: '2026-11-24',
-      now: new Date(2026, 10, 24, 10, 0, 0),
+      sessionDate: today,
     });
 
     expect(sessionJoelLeevi.participantIds).toEqual(['lifter-joel', 'lifter-leevi']);
@@ -156,17 +156,17 @@ describe('Barbell Buddy PWA (Suomi)', () => {
     const leeviView = render(
       <App store={storeLeevi} mainUserStorageKey="leevi-main-user" />,
     );
-    expect(await leeviView.findByText(/Treeni 2026-11-24/i)).toBeInTheDocument();
+    expect(await leeviView.findByText(new RegExp(`Treeni ${today}`, 'i'))).toBeInTheDocument();
     expect(leeviView.getByRole('button', { name: /Lopeta treeni/i })).toBeInTheDocument();
     leeviView.unmount();
 
-    // Render Julie's phone -> does NOT see Joel+Leevi's live session; sees "Uusi treeni" instead!
+    // Render Julie's phone -> does NOT enter Joel+Leevi's editable session; sees "Uusi treeni" + read-only live view!
     const user = userEvent.setup();
     localStorage.setItem('julie-main-user', 'lifter-julie');
     render(<App store={storeJulie} mainUserStorageKey="julie-main-user" />);
 
     expect(await screen.findByTestId('idle-hero-greeting')).toBeInTheDocument();
-    expect(screen.queryByText(/Treeni 2026-11-24/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(new RegExp(`Treeni ${today}`, 'i'))).not.toBeInTheDocument();
 
     // Julie opens "Uusi treeni" -> Joel & Leevi are marked busy in another active session, while Julie can start her own session!
     await user.click(screen.getByRole('button', { name: /Uusi treeni/i }));
@@ -779,5 +779,154 @@ describe('Barbell Buddy PWA (Suomi)', () => {
     ).rejects.toThrow(/1–20/);
 
     store.dispose();
+  });
+
+  it('allows idle non-participants to live-inspect Julie’s ongoing solo workout in Treeni (read-only) while keeping it out of Historia until ended', async () => {
+    const user = userEvent.setup();
+    const sharedStorageKey = 'test-live-inspect-idle';
+    const channelName = 'test-live-inspect-idle-chan';
+
+    const storeJulie = new LocalRealtimeStore({ storageKey: sharedStorageKey, channelName });
+    const storeJoel = new LocalRealtimeStore({ storageKey: sharedStorageKey, channelName });
+    await Promise.all([storeJulie.initialize(), storeJoel.initialize()]);
+
+    // Julie starts an active solo workout and logs her first set
+    const julieSession = await storeJulie.createSession({
+      createdBy: 'lifter-julie',
+      participantIds: ['lifter-julie'],
+    });
+    await storeJulie.addSet({
+      sessionId: julieSession.id,
+      lifterId: 'lifter-julie',
+      exerciseId: 'ex-pullups',
+      pullupMode: 'assisted',
+      weightKg: null,
+      reps: 10,
+      loggedBy: 'lifter-julie',
+    });
+
+    // Render Joel's phone (idle in Treeni tab)
+    localStorage.setItem('inspect-joel-user', 'lifter-joel');
+    render(<App store={storeJoel} mainUserStorageKey="inspect-joel-user" />);
+
+    // Joel still sees his own "Uusi treeni" button AND sees Julie's live workout expanded by default
+    expect(await screen.findByRole('button', { name: /Uusi treeni/i })).toBeInTheDocument();
+
+    const liveSection = screen.getByTestId('live-other-workouts-section');
+    const toggleBtn = within(liveSection).getByRole('button', { name: /Käynnissä nyt/i });
+    expect(toggleBtn).toHaveAttribute('aria-expanded', 'true');
+    expect(within(liveSection).getByText('LIVE')).toBeInTheDocument();
+    expect(within(liveSection).getByText('Vain luku')).toBeInTheDocument();
+
+    const julieCard = within(liveSection).getByTestId(`live-session-card-${julieSession.id}`);
+    expect(within(julieCard).getAllByText('Julie').length).toBeGreaterThan(0);
+    expect(within(julieCard).getByText(/Kuminauha × 10 toistoa/i)).toBeInTheDocument();
+
+    // Strictly read-only: zero buttons inside Julie's inspected card, and no mutation controls anywhere
+    expect(within(julieCard).queryAllByRole('button')).toHaveLength(0);
+    expect(screen.queryByRole('button', { name: /Lisää sarja/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Muokkaa/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Poista/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Lisää treenaaja/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Lopeta treeni/i })).not.toBeInTheDocument();
+
+    // Julie logs a new set in real time -> appears live in Joel's read-only inspection view
+    await act(async () => {
+      await storeJulie.addSet({
+        sessionId: julieSession.id,
+        lifterId: 'lifter-julie',
+        exerciseId: 'ex-bench-press',
+        weightKg: 52.5,
+        reps: 8,
+        loggedBy: 'lifter-julie',
+      });
+    });
+
+    expect(await within(julieCard).findByText(/52\.5 kg × 8 toistoa/i)).toBeInTheDocument();
+    expect(within(julieCard).getByText('2 sarjaa')).toBeInTheDocument();
+
+    // Ongoing session must NOT appear in Historia until ended
+    await user.click(screen.getByRole('tab', { name: /Historia/i }));
+    expect(await screen.findByText(/Ei vielä valmiita treenejä/i)).toBeInTheDocument();
+    expect(screen.queryByText(/52\.5 kg × 8 toistoa/i)).not.toBeInTheDocument();
+
+    // Once Julie ends her session, it moves to Historia and leaves Käynnissä nyt
+    await act(async () => {
+      await storeJulie.endSession(julieSession.id);
+    });
+    const completedCardBtn = await screen.findByRole('button', {
+      name: new RegExp(julieSession.sessionDate),
+    });
+    await user.click(completedCardBtn);
+    expect(await screen.findByText(/52\.5 kg × 8 toistoa/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: /Treeni/i }));
+    expect(screen.queryByTestId('live-other-workouts-section')).not.toBeInTheDocument();
+
+    storeJulie.dispose();
+    storeJoel.dispose();
+  });
+
+  it('allows a user in their own active session to inspect another user’s ongoing workout (collapsed by default) without mixing sets or controls', async () => {
+    const user = userEvent.setup();
+    const sharedStorageKey = 'test-live-inspect-parallel';
+    const channelName = 'test-live-inspect-parallel-chan';
+
+    const storeJulie = new LocalRealtimeStore({ storageKey: sharedStorageKey, channelName });
+    const storeLeevi = new LocalRealtimeStore({ storageKey: sharedStorageKey, channelName });
+    await Promise.all([storeJulie.initialize(), storeLeevi.initialize()]);
+
+    // Julie has her own active session
+    const julieSession = await storeJulie.createSession({
+      createdBy: 'lifter-julie',
+      participantIds: ['lifter-julie'],
+    });
+    await storeJulie.addSet({
+      sessionId: julieSession.id,
+      lifterId: 'lifter-julie',
+      exerciseId: 'ex-squat',
+      weightKg: 75,
+      reps: 6,
+      loggedBy: 'lifter-julie',
+    });
+
+    // Leevi has his own separate active session on the same day
+    const leeviSession = await storeLeevi.createSession({
+      createdBy: 'lifter-leevi',
+      participantIds: ['lifter-leevi'],
+    });
+    await storeLeevi.addSet({
+      sessionId: leeviSession.id,
+      lifterId: 'lifter-leevi',
+      exerciseId: 'ex-deadlift',
+      weightKg: 150,
+      reps: 5,
+      loggedBy: 'lifter-leevi',
+    });
+
+    localStorage.setItem('parallel-leevi-user', 'lifter-leevi');
+    render(<App store={storeLeevi} mainUserStorageKey="parallel-leevi-user" />);
+
+    // Leevi sees his own active session sets and controls, without Julie's sets mixed in
+    expect(await screen.findByText(/150 kg × 5 toistoa/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Lisää sarja \(Leevi\)/i })).toBeInTheDocument();
+    expect(screen.queryByText(/75 kg × 6 toistoa/i)).not.toBeInTheDocument();
+
+    // Below Leevi's session feed, Käynnissä nyt is collapsed by default so it stays out of the way
+    const liveSection = screen.getByTestId('live-other-workouts-section');
+    const toggleBtn = within(liveSection).getByRole('button', { name: /Käynnissä nyt/i });
+    expect(toggleBtn).toHaveAttribute('aria-expanded', 'false');
+
+    // Expanding Käynnissä nyt reveals Julie's ongoing workout in read-only mode
+    await user.click(toggleBtn);
+    expect(toggleBtn).toHaveAttribute('aria-expanded', 'true');
+
+    const julieCard = within(liveSection).getByTestId(`live-session-card-${julieSession.id}`);
+    expect(within(julieCard).getByText(/75 kg × 6 toistoa/i)).toBeInTheDocument();
+    expect(within(julieCard).queryByText(/150 kg × 5 toistoa/i)).not.toBeInTheDocument();
+    expect(within(julieCard).queryAllByRole('button')).toHaveLength(0);
+
+    storeJulie.dispose();
+    storeLeevi.dispose();
   });
 });
