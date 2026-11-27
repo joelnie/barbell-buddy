@@ -14,7 +14,7 @@ import type {
 } from '../types/models';
 import { verifyAdminPinHash } from './adminAuth';
 import { computeSessionExpiryIso, formatLocalDate, isSessionActiveAt } from './dates';
-import { localizeExerciseName } from './finnish';
+import { compareExercisesAlphabetically, localizeExerciseName } from './finnish';
 import { normalizeAndValidateSet } from './metrics';
 
 interface LifterRow {
@@ -285,7 +285,8 @@ export class SupabaseRealtimeStore implements DataStore {
         sortOrder: r.sort_order,
         createdAt: r.created_at,
         deletedAt: null,
-      }));
+      }))
+      .sort(compareExercisesAlphabetically);
 
     const activeExerciseIds = new Set(exercises.map((e) => e.id));
 

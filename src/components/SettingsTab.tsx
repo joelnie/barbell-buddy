@@ -18,6 +18,7 @@ import {
 import { useApp } from '../context/AppContext';
 import { SECONDARY_ACCENT_OPTIONS, useTheme } from '../context/ThemeContext';
 import { formatTimeShort } from '../lib/dates';
+import { sortExercisesAlphabetically } from '../lib/finnish';
 import { AVATAR_COLOR_SWATCHES } from '../lib/seedData';
 import type { ExerciseCategory, ThemeMode } from '../types/models';
 
@@ -57,9 +58,14 @@ export function SettingsTab() {
     [snapshot.lifters],
   );
 
-  const exerciseMap = useMemo(
-    () => new Map(snapshot.exercises.map((e) => [e.id, e])),
+  const sortedExercises = useMemo(
+    () => sortExercisesAlphabetically(snapshot.exercises),
     [snapshot.exercises],
+  );
+
+  const exerciseMap = useMemo(
+    () => new Map(sortedExercises.map((e) => [e.id, e])),
+    [sortedExercises],
   );
 
   const handleAddUser = async (e: FormEvent) => {
@@ -516,8 +522,8 @@ export function SettingsTab() {
           </p>
         )}
 
-        <div className="space-y-1.5 pt-1">
-          {snapshot.exercises.map((ex) => {
+        <div className="space-y-1.5 pt-1" data-testid="settings-exercises-list">
+          {sortedExercises.map((ex) => {
             const isConfirming = confirmDeleteExerciseId === ex.id;
             const isRenaming = isJoelAdmin && renamingExerciseId === ex.id;
             const categoryLabel =
