@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import {
   Check,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Clock,
   Dumbbell,
   Pencil,
@@ -40,19 +42,23 @@ import { LiveWorkoutsSection } from './LiveWorkoutsSection';
 import { VerticalDiscreteSlider } from './VerticalDiscreteSlider';
 
 export function SessionTab() {
-  const { store, snapshot, mainUser, activeSessionForMainUser, otherActiveSessions } = useApp();
+  const {
+    store,
+    snapshot,
+    mainUser,
+    activeSessionForMainUser,
+    otherActiveSessions,
+    sessionDraft,
+    setSessionDraft,
+  } = useApp();
 
   const [showNewSessionPicker, setShowNewSessionPicker] = useState(false);
   const [selectedParticipantIds, setSelectedParticipantIds] = useState<string[]>([]);
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [heroTemplate, setHeroTemplate] = useState<string>(() => pickRandomHeroPhraseTemplate());
-
-  // Active session logging state (vertical discrete slider indices)
-  const [selectedLifterId, setSelectedLifterId] = useState<string>('');
-  const [selectedExerciseId, setSelectedExerciseId] = useState<string>('');
-  const [repsIndex, setRepsIndex] = useState<number>(7); // 8 reps default
-  const [weightIndex, setWeightIndex] = useState<number>(1);
   const [formError, setFormError] = useState<string | null>(null);
+  const [addedToastText, setAddedToastText] = useState<string | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Quick "+ Exercise" inline sheet
   const [showQuickAddExercise, setShowQuickAddExercise] = useState(false);
@@ -67,6 +73,34 @@ export function SessionTab() {
   const [editPullupMode, setEditPullupMode] = useState<PullupMode>('bodyweight');
   const [editWeightInput, setEditWeightInput] = useState<string>('0');
   const [editRepsInput, setEditRepsInput] = useState<string>('8');
+
+  // Collapsible exercise groups in active session feed
+  const [expandedExerciseIds, setExpandedExerciseIds] = useState<Set<string>>(() => {
+    if (!activeSessionForMainUser) return new Set();
+    const setsForActive = snapshot.sets.filter(
+      (s) => s.sessionId === activeSessionForMainUser.id,
+    );
+    const latest = setsForActive[setsForActive.length - 1];
+    return latest ? new Set([latest.exerciseId]) : new Set();
+  });
+  const trackedSessionIdRef = useRef<string | null>(activeSessionForMainUser?.id ?? null);
+  const seenSetIdsRef = useRef<Set<string>>(
+    new Set(
+      activeSessionForMainUser
+        ? snapshot.sets
+            .filter((s) => s.sessionId === activeSessionForMainUser.id)
+            .map((s) => s.id)
+        : [],
+    ),
+  );
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+      }
+    };
+  }, []);
 
   const todayStr = formatLocalDate();
 
@@ -84,14 +118,6 @@ export function SessionTab() {
     return set;
   }, [snapshot.sessions]);
 
-  // Keep selectedExerciseId valid
-  useEffect(() => {
-    if (snapshot.exercises.length === 0) return;
-    if (!selectedExerciseId || !snapshot.exercises.some((e) => e.id === selectedExerciseId)) {
-      setSelectedExerciseId(snapshot.exercises[0].id);
-    }
-  }, [snapshot.exercises, selectedExerciseId]);
-
   // Rotate variating Finnish hero phrase when switching main user or returning to idle view
   useEffect(() => {
     if (!activeSessionForMainUser && mainUser?.id) {
@@ -104,26 +130,26 @@ export function SessionTab() {
     if (!activeSessionForMainUser) {
       return mainUser?.id ?? '';
     }
-    if (selectedLifterId && activeSessionForMainUser.participantIds.includes(selectedLifterId)) {
-      return selectedLifterId;
+    if (
+      sessionDraft.lifterId &&
+      activeSessionForMainUser.participantIds.includes(sessionDraft.lifterId)
+    ) {
+      return sessionDraft.lifterId;
     }
     if (mainUser && activeSessionForMainUser.participantIds.includes(mainUser.id)) {
       return mainUser.id;
     }
     return activeSessionForMainUser.participantIds[0] ?? '';
-  }, [activeSessionForMainUser, mainUser, selectedLifterId]);
+  }, [activeSessionForMainUser, mainUser, sessionDraft.lifterId]);
 
-  // Keep selectedLifterId synced to participants of active session
-  useEffect(() => {
-    if (effectiveLifterId !== selectedLifterId) {
-      setSelectedLifterId(effectiveLifterId);
+  const selectedExercise = useMemo(() => {
+    if (snapshot.exercises.length === 0) return undefined;
+    if (sessionDraft.exerciseId) {
+      const found = snapshot.exercises.find((e) => e.id === sessionDraft.exerciseId);
+      if (found) return found;
     }
-  }, [effectiveLifterId, selectedLifterId]);
-
-  const selectedExercise = useMemo(
-    () => snapshot.exercises.find((e) => e.id === selectedExerciseId) ?? snapshot.exercises[0],
-    [snapshot.exercises, selectedExerciseId],
-  );
+    return snapshot.exercises[0];
+  }, [snapshot.exercises, sessionDraft.exerciseId]);
 
   const repsStops = useMemo(() => getRepsSliderStops(), []);
 
@@ -143,23 +169,158 @@ export function SessionTab() {
     );
   }, [snapshot.sets, snapshot.exercises, snapshot.sessions, effectiveLifterId, selectedExercise]);
 
-  // Default values for each user & exercise always start at the reps and weights they did last time
+  const defaultRepsIndex = useMemo(
+    () => (selectedExercise ? resolveInitialRepsIndex(selectedExercise, lastSetForSelection) : 7),
+    [selectedExercise, lastSetForSelection],
+  );
+
+  const defaultWeightIndex = useMemo(
+    () =>
+      selectedExercise
+        ? resolveInitialWeightIndex(selectedExercise, weightStops, lastSetForSelection)
+        : 0,
+    [selectedExercise, weightStops, lastSetForSelection],
+  );
+
+  const currentDraftKey =
+    selectedExercise && effectiveLifterId
+      ? `${activeSessionForMainUser?.id ?? 'idle'}:${effectiveLifterId}:${selectedExercise.id}`
+      : '';
+
+  const isDraftInitializedForCurrent =
+    Boolean(currentDraftKey) && sessionDraft.initializedKey === currentDraftKey;
+
+  const repsIndex = isDraftInitializedForCurrent ? sessionDraft.repsIndex : defaultRepsIndex;
+  const weightIndex = isDraftInitializedForCurrent ? sessionDraft.weightIndex : defaultWeightIndex;
+
+  // Keep AppContext sessionDraft synced across tab switches while defaulting from last set on exercise/lifter change
   useEffect(() => {
-    if (!effectiveLifterId || !selectedExercise) return;
-    const stopsForExercise = getWeightSliderStopsForExercise(selectedExercise);
-    setRepsIndex(resolveInitialRepsIndex(selectedExercise, lastSetForSelection));
-    setWeightIndex(
-      resolveInitialWeightIndex(selectedExercise, stopsForExercise, lastSetForSelection),
-    );
+    if (!currentDraftKey || !selectedExercise || !effectiveLifterId) return;
+    const targetSessionId = activeSessionForMainUser?.id ?? null;
+
+    if (sessionDraft.initializedKey !== currentDraftKey) {
+      setSessionDraft({
+        sessionId: targetSessionId,
+        lifterId: effectiveLifterId,
+        exerciseId: selectedExercise.id,
+        repsIndex: defaultRepsIndex,
+        weightIndex: defaultWeightIndex,
+        initializedKey: currentDraftKey,
+        customized: false,
+      });
+      return;
+    }
+
+    if (
+      !sessionDraft.customized &&
+      (sessionDraft.repsIndex !== defaultRepsIndex ||
+        sessionDraft.weightIndex !== defaultWeightIndex)
+    ) {
+      setSessionDraft((prev) => ({
+        ...prev,
+        repsIndex: defaultRepsIndex,
+        weightIndex: defaultWeightIndex,
+      }));
+    }
   }, [
+    currentDraftKey,
     activeSessionForMainUser?.id,
     effectiveLifterId,
-    selectedExercise?.id,
-    lastSetForSelection?.id,
-    lastSetForSelection?.reps,
-    lastSetForSelection?.weightKg,
-    lastSetForSelection?.pullupMode,
+    selectedExercise,
+    defaultRepsIndex,
+    defaultWeightIndex,
+    sessionDraft.initializedKey,
+    sessionDraft.customized,
+    sessionDraft.repsIndex,
+    sessionDraft.weightIndex,
+    setSessionDraft,
   ]);
+
+  const sessionSets = useMemo(
+    () =>
+      activeSessionForMainUser
+        ? snapshot.sets.filter((s) => s.sessionId === activeSessionForMainUser.id)
+        : [],
+    [activeSessionForMainUser, snapshot.sets],
+  );
+
+  // Auto-collapse previous exercise groups into dropdowns whenever a set for the next exercise is marked
+  useEffect(() => {
+    if (!activeSessionForMainUser) {
+      trackedSessionIdRef.current = null;
+      seenSetIdsRef.current = new Set();
+      setExpandedExerciseIds(new Set());
+      return;
+    }
+
+    if (trackedSessionIdRef.current !== activeSessionForMainUser.id) {
+      trackedSessionIdRef.current = activeSessionForMainUser.id;
+      seenSetIdsRef.current = new Set(sessionSets.map((s) => s.id));
+      const latestExId =
+        sessionSets.length > 0 ? sessionSets[sessionSets.length - 1].exerciseId : null;
+      setExpandedExerciseIds(latestExId ? new Set([latestExId]) : new Set());
+      return;
+    }
+
+    const newSets = sessionSets.filter((s) => !seenSetIdsRef.current.has(s.id));
+    seenSetIdsRef.current = new Set(sessionSets.map((s) => s.id));
+    if (newSets.length > 0) {
+      const newestExerciseId = newSets[newSets.length - 1].exerciseId;
+      setExpandedExerciseIds(new Set([newestExerciseId]));
+    }
+  }, [activeSessionForMainUser, sessionSets]);
+
+  const toggleExerciseGroup = (exerciseId: string) => {
+    setExpandedExerciseIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(exerciseId)) {
+        next.delete(exerciseId);
+      } else {
+        next.add(exerciseId);
+      }
+      return next;
+    });
+  };
+
+  const handleSelectLifter = (lifterId: string) => {
+    setSessionDraft((prev) => ({
+      ...prev,
+      lifterId,
+      customized: false,
+    }));
+  };
+
+  const handleSelectExercise = (exerciseId: string) => {
+    setSessionDraft((prev) => ({
+      ...prev,
+      exerciseId,
+      customized: false,
+    }));
+  };
+
+  const handleSelectRepsIndex = (nextRepsIndex: number) => {
+    setSessionDraft({
+      sessionId: activeSessionForMainUser?.id ?? null,
+      lifterId: effectiveLifterId,
+      exerciseId: selectedExercise?.id ?? '',
+      repsIndex: nextRepsIndex,
+      weightIndex,
+      initializedKey: currentDraftKey,
+      customized: true,
+    });
+  };
+
+  const handleSelectWeightIndex = (nextWeightIndex: number) => {
+    setSessionDraft({
+      sessionId: activeSessionForMainUser?.id ?? null,
+      lifterId: effectiveLifterId,
+      exerciseId: selectedExercise?.id ?? '',
+      repsIndex,
+      weightIndex: nextWeightIndex,
+      initializedKey: currentDraftKey,
+      customized: true,
+    });
+  };
 
   const openNewSessionFlow = () => {
     if (!mainUser) return;
@@ -213,7 +374,7 @@ export function SessionTab() {
     const { pullupMode, weightKg } = mapWeightStopToSetPayload(selectedExercise, safeWeightStop);
 
     try {
-      await store.addSet({
+      const created = await store.addSet({
         sessionId: activeSessionForMainUser.id,
         lifterId: effectiveLifterId,
         exerciseId: selectedExercise.id,
@@ -222,6 +383,31 @@ export function SessionTab() {
         reps: parsedReps,
         loggedBy: mainUser?.id ?? effectiveLifterId,
       });
+
+      setExpandedExerciseIds(new Set([created.exerciseId]));
+
+      try {
+        if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+          navigator.vibrate(15);
+        }
+      } catch {
+        // Ignore unsupported vibration environments
+      }
+
+      const targetName = lifterMap.get(effectiveLifterId)?.name ?? '';
+      const loadSummary = `${formatSetLoad(created, selectedExercise)} × ${created.reps}`;
+      setAddedToastText(
+        targetName
+          ? `Sarja lisätty! ${targetName} · ${loadSummary}`
+          : `Sarja lisätty! ${loadSummary}`,
+      );
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+      }
+      toastTimerRef.current = setTimeout(() => {
+        setAddedToastText(null);
+        toastTimerRef.current = null;
+      }, 1000);
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Sarjan kirjaaminen epäonnistui.');
     }
@@ -235,7 +421,7 @@ export function SessionTab() {
         name: newExerciseName,
         category: newExerciseCategory,
       });
-      setSelectedExerciseId(created.id);
+      handleSelectExercise(created.id);
       setNewExerciseName('');
       setShowQuickAddExercise(false);
     } catch (err) {
@@ -458,8 +644,6 @@ export function SessionTab() {
     (l) => !activeSessionForMainUser.participantIds.includes(l.id) && !busyLifterIds.has(l.id),
   );
 
-  const sessionSets = snapshot.sets.filter((s) => s.sessionId === activeSessionForMainUser.id);
-
   // Group sets by exercise in chronological order of first appearance
   const exerciseGroups: { exerciseId: string; sets: WorkoutSet[] }[] = [];
   for (const s of sessionSets) {
@@ -473,6 +657,24 @@ export function SessionTab() {
 
   return (
     <div className="space-y-4">
+      {addedToastText && (
+        <div
+          role="status"
+          aria-live="polite"
+          data-testid="set-added-toast"
+          className="pointer-events-none fixed top-20 right-4 left-4 z-40 mx-auto flex max-w-xs items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-xs font-extrabold shadow-lg"
+          style={{
+            backgroundColor: 'var(--bg-surface)',
+            border: '2px solid var(--accent)',
+            color: 'var(--accent-text)',
+            boxShadow: 'var(--accent-glow)',
+          }}
+        >
+          <CheckCircle2 className="h-4 w-4 shrink-0" />
+          <span className="truncate">{addedToastText}</span>
+        </div>
+      )}
+
       {/* Active Session Banner */}
       <section className="bb-widget p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -603,7 +805,7 @@ export function SessionTab() {
                     key={p.id}
                     type="button"
                     aria-pressed={isSelected}
-                    onClick={() => setSelectedLifterId(p.id)}
+                    onClick={() => handleSelectLifter(p.id)}
                     className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-bold transition ${
                       isSelected ? 'bb-pill-active' : 'bb-pill-idle'
                     }`}
@@ -646,7 +848,7 @@ export function SessionTab() {
               id="session-exercise-select"
               aria-label="Liike"
               value={selectedExercise?.id ?? ''}
-              onChange={(e) => setSelectedExerciseId(e.target.value)}
+              onChange={(e) => handleSelectExercise(e.target.value)}
               className="bb-input w-full px-3.5 py-2.5 text-sm font-bold"
             >
               {snapshot.exercises.map((ex) => (
@@ -677,7 +879,8 @@ export function SessionTab() {
                   className="bb-input px-3 py-2 text-sm"
                 >
                   <option value="barbell">Levytanko (kg)</option>
-                  <option value="dumbbell">Käsipaino (kg / kp)</option>
+                  <option value="dumbbell">Käsipaino (x2) (kg / kp)</option>
+                  <option value="dumbbell_single">Käsipaino (x1) (kg)</option>
                   <option value="machine">Laite / Talja (kg)</option>
                   <option value="bodyweight">Kehonpaino (vain toistot)</option>
                   <option value="pullup">Leuanveto (Kuminauha / KP / +kg)</option>
@@ -701,7 +904,7 @@ export function SessionTab() {
               label="Toistot"
               stops={repsStops}
               selectedIndex={repsIndex}
-              onSelectIndex={setRepsIndex}
+              onSelectIndex={handleSelectRepsIndex}
               stepUpLabel="Lisää toistoja"
               stepDownLabel="Vähennä toistoja"
               trackTestId="reps-slider-track"
@@ -710,13 +913,16 @@ export function SessionTab() {
             <VerticalDiscreteSlider
               id="set-weight-slider"
               label={
-                selectedExercise && isInclineDumbbellBenchExercise(selectedExercise)
+                selectedExercise &&
+                (selectedExercise.category === 'dumbbell' ||
+                  (selectedExercise.category !== 'dumbbell_single' &&
+                    isInclineDumbbellBenchExercise(selectedExercise)))
                   ? 'Paino (x2)'
                   : 'Paino'
               }
               stops={weightStops}
               selectedIndex={weightIndex}
-              onSelectIndex={setWeightIndex}
+              onSelectIndex={handleSelectWeightIndex}
               stepUpLabel="Lisää painoa"
               stepDownLabel="Vähennä painoa"
               trackTestId="weight-slider-track"
@@ -762,21 +968,50 @@ export function SessionTab() {
             </p>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {exerciseGroups.map((group) => {
               const ex = exerciseMap.get(group.exerciseId);
               const perLifterCounter = new Map<string, number>();
+              const isGroupExpanded = expandedExerciseIds.has(group.exerciseId);
 
               return (
-                <div key={group.exerciseId} className="bb-subcard p-3">
-                  <div className="mb-2 flex items-center justify-between">
+                <div
+                  key={group.exerciseId}
+                  data-testid={`session-exercise-group-${group.exerciseId}`}
+                  className="bb-subcard p-3"
+                >
+                  <button
+                    type="button"
+                    aria-expanded={isGroupExpanded}
+                    onClick={() => toggleExerciseGroup(group.exerciseId)}
+                    className="flex w-full items-center justify-between gap-2 text-left transition hover:opacity-95"
+                  >
                     <h4 className="text-sm font-extrabold">{ex?.name ?? 'Liike'}</h4>
-                    <span className="text-[11px] font-semibold" style={{ color: 'var(--text-muted)' }}>
-                      {group.sets.length} {group.sets.length === 1 ? 'sarja' : 'sarjaa'}
-                    </span>
-                  </div>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <span
+                        className="rounded-full px-2 py-0.5 text-[11px] font-bold"
+                        style={{
+                          backgroundColor: 'var(--bg-surface)',
+                          color: 'var(--text-muted)',
+                        }}
+                      >
+                        {group.sets.length} {group.sets.length === 1 ? 'sarja' : 'sarjaa'}
+                      </span>
+                      <span style={{ color: 'var(--accent-text)' }}>
+                        {isGroupExpanded ? (
+                          <ChevronUp className="h-4 w-4" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4" />
+                        )}
+                      </span>
+                    </div>
+                  </button>
 
-                  <div className="space-y-2">
+                  {isGroupExpanded && (
+                    <div
+                      className="mt-2.5 space-y-2 border-t pt-2.5"
+                      style={{ borderColor: 'var(--border-subtle)' }}
+                    >
                     {group.sets.map((s) => {
                       const setNum = (perLifterCounter.get(s.lifterId) ?? 0) + 1;
                       perLifterCounter.set(s.lifterId, setNum);
@@ -923,7 +1158,8 @@ export function SessionTab() {
                         </div>
                       );
                     })}
-                  </div>
+                    </div>
+                  )}
                 </div>
               );
             })}

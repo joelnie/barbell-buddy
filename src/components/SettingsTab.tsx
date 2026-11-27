@@ -485,7 +485,8 @@ export function SettingsTab() {
               className="bb-input px-3 py-2 text-sm"
             >
               <option value="barbell">Levytanko (kg)</option>
-              <option value="dumbbell">Käsipaino (kg / kp)</option>
+              <option value="dumbbell">Käsipaino (x2) (kg / kp)</option>
+              <option value="dumbbell_single">Käsipaino (x1) (kg)</option>
               <option value="machine">Laite / Talja (kg)</option>
               <option value="bodyweight">Kehonpaino (toistot)</option>
               <option value="pullup">Leuanveto (Kuminauha / KP / +kg)</option>
@@ -523,12 +524,14 @@ export function SettingsTab() {
               ex.category === 'pullup'
                 ? 'Kuminauha / Kehonpaino / +kg'
                 : ex.category === 'dumbbell'
-                  ? 'Käsipaino (kg / kp)'
-                  : ex.category === 'barbell'
-                    ? 'Levytanko (kg)'
-                    : ex.category === 'machine'
-                      ? 'Laite / Talja (kg)'
-                      : 'Kehonpaino (toistot)';
+                  ? 'Käsipaino (x2) (kg / kp)'
+                  : ex.category === 'dumbbell_single'
+                    ? 'Käsipaino (x1) (kg)'
+                    : ex.category === 'barbell'
+                      ? 'Levytanko (kg)'
+                      : ex.category === 'machine'
+                        ? 'Laite / Talja (kg)'
+                        : 'Kehonpaino (toistot)';
 
             if (isRenaming) {
               return (

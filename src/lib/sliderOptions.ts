@@ -45,13 +45,17 @@ export const DUMBBELL_RAW_WEIGHT_OPTIONS: readonly number[] = [
   8, 9, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40,
 ];
 
+export const SINGLE_DUMBBELL_RAW_WEIGHT_OPTIONS: readonly number[] = [
+  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40,
+];
+
 export const CUSTOM_BARBELL_RAW_WEIGHT_OPTIONS: readonly number[] = generateLinearStops(
   20,
   140,
   2.5,
 );
 
-export const MACHINE_RAW_WEIGHT_OPTIONS: readonly number[] = generateLinearStops(5, 120, 2.5);
+export const MACHINE_RAW_WEIGHT_OPTIONS: readonly number[] = generateLinearStops(2.5, 120, 2.5);
 
 export function getRepsSliderStops(): SliderStop[] {
   return REPS_RAW_OPTIONS.map((rep) => ({
@@ -71,6 +75,10 @@ export function getRawWeightOptionsForExercise(exercise: Exercise): readonly Raw
 
   if (exercise.category === 'dumbbell') {
     return DUMBBELL_RAW_WEIGHT_OPTIONS;
+  }
+
+  if (exercise.category === 'dumbbell_single') {
+    return SINGLE_DUMBBELL_RAW_WEIGHT_OPTIONS;
   }
 
   if (exercise.category === 'bodyweight') {
@@ -241,6 +249,8 @@ export function resolveInitialWeightIndex(
   let defaultKg = 40;
   if (exercise.category === 'dumbbell') {
     defaultKg = 18;
+  } else if (exercise.category === 'dumbbell_single') {
+    defaultKg = 10;
   } else if (exercise.category === 'machine') {
     defaultKg = 35;
   } else if (isDeadliftExercise(exercise)) {

@@ -20,6 +20,26 @@ import type {
 
 const MAIN_USER_STORAGE_KEY = 'bb_main_user_id_v1';
 
+export interface SessionLoggerDraft {
+  sessionId: string | null;
+  lifterId: string;
+  exerciseId: string;
+  repsIndex: number;
+  weightIndex: number;
+  initializedKey: string;
+  customized: boolean;
+}
+
+const INITIAL_SESSION_DRAFT: SessionLoggerDraft = {
+  sessionId: null,
+  lifterId: '',
+  exerciseId: '',
+  repsIndex: 7,
+  weightIndex: 1,
+  initializedKey: '',
+  customized: false,
+};
+
 interface AppContextValue {
   store: DataStore;
   snapshot: StoreSnapshot;
@@ -30,6 +50,8 @@ interface AppContextValue {
   completedSessions: WorkoutSession[];
   deletedSessions: WorkoutSession[];
   pendingAdminTarget: Lifter | null;
+  sessionDraft: SessionLoggerDraft;
+  setSessionDraft: React.Dispatch<React.SetStateAction<SessionLoggerDraft>>;
   requestSwitchMainUser: (lifter: Lifter) => void;
   cancelAdminUnlock: () => void;
   completeAdminUnlockWithPin: (pin: string) => Promise<boolean>;
@@ -69,6 +91,7 @@ export function AppProvider({
     }
   });
   const [pendingAdminTarget, setPendingAdminTarget] = useState<Lifter | null>(null);
+  const [sessionDraft, setSessionDraft] = useState<SessionLoggerDraft>(INITIAL_SESSION_DRAFT);
   const [, setClockTick] = useState(0);
 
   useEffect(() => {
@@ -225,6 +248,13 @@ export function AppProvider({
       );
   }, [snapshot.sessions]);
 
+  // Reset logger draft when an active session ends so the next workout starts fresh
+  useEffect(() => {
+    if (!activeSessionForMainUser && sessionDraft.sessionId !== null) {
+      setSessionDraft(INITIAL_SESSION_DRAFT);
+    }
+  }, [activeSessionForMainUser, sessionDraft.sessionId]);
+
   const value = useMemo<AppContextValue>(
     () => ({
       store,
@@ -236,6 +266,8 @@ export function AppProvider({
       completedSessions,
       deletedSessions,
       pendingAdminTarget,
+      sessionDraft,
+      setSessionDraft,
       requestSwitchMainUser,
       cancelAdminUnlock,
       completeAdminUnlockWithPin,
@@ -250,6 +282,7 @@ export function AppProvider({
       completedSessions,
       deletedSessions,
       pendingAdminTarget,
+      sessionDraft,
       requestSwitchMainUser,
       cancelAdminUnlock,
       completeAdminUnlockWithPin,

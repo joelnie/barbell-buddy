@@ -23,6 +23,7 @@ interface LifterRow {
   avatar_color: string;
   is_admin: boolean;
   created_at: string;
+  deleted_at?: string | null;
 }
 
 interface ExerciseRow {
@@ -32,6 +33,7 @@ interface ExerciseRow {
   is_builtin: boolean;
   sort_order: number;
   created_at: string;
+  deleted_at?: string | null;
 }
 
 interface SessionRow {
@@ -222,27 +224,30 @@ export class SupabaseRealtimeStore implements DataStore {
     }
 
     const rawLifters = (liftersRes.data ?? []) as LifterRow[];
-    const lifters: Lifter[] = rawLifters.map((r) => {
-      const isLegacyJulieColor =
-        r.name.trim().toLowerCase() === 'julie' && r.avatar_color === '#f43f5e';
-      if (isLegacyJulieColor) {
-        void this.client.from('lifters').update({ avatar_color: '#ec4899' }).eq('id', r.id);
-      }
-      return {
-        id: r.id,
-        name: r.name,
-        avatarColor: isLegacyJulieColor ? '#ec4899' : r.avatar_color,
-        isAdmin: r.is_admin,
-        createdAt: r.created_at,
-      };
-    });
+    const lifters: Lifter[] = rawLifters
+      .filter((r) => !r.deleted_at)
+      .map((r) => {
+        const isLegacyJulieColor =
+          r.name.trim().toLowerCase() === 'julie' && r.avatar_color === '#f43f5e';
+        if (isLegacyJulieColor) {
+          void this.client.from('lifters').update({ avatar_color: '#ec4899' }).eq('id', r.id);
+        }
+        return {
+          id: r.id,
+          name: r.name,
+          avatarColor: isLegacyJulieColor ? '#ec4899' : r.avatar_color,
+          isAdmin: r.is_admin,
+          createdAt: r.created_at,
+          deletedAt: null,
+        };
+      });
 
     // Auto-seed starter lifter Tuomas once for existing cloud projects
     try {
       const tuomasSeedKey = 'bb_supabase_tuomas_seeded_v1';
       if (
-        lifters.length > 0 &&
-        !lifters.some((l) => l.name.trim().toLowerCase() === 'tuomas') &&
+        rawLifters.length > 0 &&
+        !rawLifters.some((l) => l.name.trim().toLowerCase() === 'tuomas') &&
         typeof localStorage !== 'undefined' &&
         !localStorage.getItem(tuomasSeedKey)
       ) {
@@ -260,6 +265,7 @@ export class SupabaseRealtimeStore implements DataStore {
             avatarColor: t.avatar_color,
             isAdmin: t.is_admin,
             createdAt: t.created_at,
+            deletedAt: null,
           });
         }
       }
@@ -267,14 +273,21 @@ export class SupabaseRealtimeStore implements DataStore {
       // Ignore duplicate/offline seed errors
     }
 
-    const exercises: Exercise[] = ((exercisesRes.data ?? []) as ExerciseRow[]).map((r) => ({
-      id: r.id,
-      name: localizeExerciseName(r.name),
-      category: r.category,
-      isBuiltin: r.is_builtin,
-      sortOrder: r.sort_order,
-      createdAt: r.created_at,
-    }));
+    const activeLifterIds = new Set(lifters.map((l) => l.id));
+
+    const exercises: Exercise[] = ((exercisesRes.data ?? []) as ExerciseRow[])
+      .filter((r) => !r.deleted_at)
+      .map((r) => ({
+        id: r.id,
+        name: localizeExerciseName(r.name),
+        category: r.category,
+        isBuiltin: r.is_builtin,
+        sortOrder: r.sort_order,
+        createdAt: r.created_at,
+        deletedAt: null,
+      }));
+
+    const activeExerciseIds = new Set(exercises.map((e) => e.id));
 
     const sessions: WorkoutSession[] = ((sessionsRes.data ?? []) as SessionRow[])
       .filter((r) => r.session_date !== '__deleted__')
@@ -283,24 +296,29 @@ export class SupabaseRealtimeStore implements DataStore {
         sessionDate: r.session_date,
         status: r.status,
         createdBy: r.created_by,
-        participantIds: participantsBySession.get(r.id) ?? [],
+        participantIds: (participantsBySession.get(r.id) ?? []).filter((id) =>
+          activeLifterIds.has(id),
+        ),
         startedAt: r.started_at,
         endedAt: r.ended_at,
         expiresAt: r.expires_at,
         deletedAt: r.deleted_at ?? null,
-      }));
+      }))
+      .filter((s) => s.participantIds.length > 0);
 
-    const sets: WorkoutSet[] = ((setsRes.data ?? []) as SetRow[]).map((r) => ({
-      id: r.id,
-      sessionId: r.session_id,
-      lifterId: r.lifter_id,
-      exerciseId: r.exercise_id,
-      pullupMode: r.pullup_mode,
-      weightKg: r.weight_kg === null ? null : Number(r.weight_kg),
-      reps: r.reps,
-      loggedBy: r.logged_by,
-      createdAt: r.created_at,
-    }));
+    const sets: WorkoutSet[] = ((setsRes.data ?? []) as SetRow[])
+      .filter((r) => activeLifterIds.has(r.lifter_id) && activeExerciseIds.has(r.exercise_id))
+      .map((r) => ({
+        id: r.id,
+        sessionId: r.session_id,
+        lifterId: r.lifter_id,
+        exerciseId: r.exercise_id,
+        pullupMode: r.pullup_mode,
+        weightKg: r.weight_kg === null ? null : Number(r.weight_kg),
+        reps: r.reps,
+        loggedBy: r.logged_by,
+        createdAt: r.created_at,
+      }));
 
     this.updateSnapshot({
       lifters,
@@ -551,12 +569,35 @@ export class SupabaseRealtimeStore implements DataStore {
   async addLifter(input: { name: string; avatarColor: string }): Promise<Lifter> {
     const trimmed = input.name.trim();
     if (!trimmed) throw new Error('Anna uuden käyttäjän nimi.');
+    const color = input.avatarColor || '#10b981';
+
+    const rpcRes = await this.client.rpc('add_or_restore_lifter', {
+      new_name: trimmed,
+      new_avatar_color: color,
+    });
+
+    if (!rpcRes.error && rpcRes.data) {
+      const r = rpcRes.data as LifterRow;
+      await this.refresh();
+      return {
+        id: r.id,
+        name: r.name,
+        avatarColor: r.avatar_color,
+        isAdmin: r.is_admin,
+        createdAt: r.created_at,
+        deletedAt: null,
+      };
+    }
+
+    if (rpcRes.error && rpcRes.error.code !== 'PGRST202') {
+      throw new Error(rpcRes.error.message || 'Käyttäjän lisääminen epäonnistui.');
+    }
 
     const { data, error } = await this.client
       .from('lifters')
       .insert({
         name: trimmed,
-        avatar_color: input.avatarColor || '#10b981',
+        avatar_color: color,
         is_admin: false,
       })
       .select('*')
@@ -571,6 +612,7 @@ export class SupabaseRealtimeStore implements DataStore {
       avatarColor: r.avatar_color,
       isAdmin: r.is_admin,
       createdAt: r.created_at,
+      deletedAt: null,
     };
   }
 
@@ -586,12 +628,37 @@ export class SupabaseRealtimeStore implements DataStore {
   async addExercise(input: { name: string; category: ExerciseCategory }): Promise<Exercise> {
     const trimmed = input.name.trim();
     if (!trimmed) throw new Error('Anna liikkeen nimi.');
+    const localizedName = localizeExerciseName(trimmed);
+
+    const rpcRes = await this.client.rpc('add_or_restore_exercise', {
+      new_name: localizedName,
+      new_category: input.category,
+    });
+
+    if (!rpcRes.error && rpcRes.data) {
+      const r = rpcRes.data as ExerciseRow;
+      await this.refresh();
+      return {
+        id: r.id,
+        name: localizeExerciseName(r.name),
+        category: r.category,
+        isBuiltin: r.is_builtin,
+        sortOrder: r.sort_order,
+        createdAt: r.created_at,
+        deletedAt: null,
+      };
+    }
+
+    if (rpcRes.error && rpcRes.error.code !== 'PGRST202') {
+      throw new Error(rpcRes.error.message || 'Liikkeen lisääminen epäonnistui.');
+    }
+
     const maxSort = this.snapshot.exercises.reduce((m, e) => Math.max(m, e.sortOrder), 0);
 
     const { data, error } = await this.client
       .from('exercises')
       .insert({
-        name: localizeExerciseName(trimmed),
+        name: localizedName,
         category: input.category,
         is_builtin: false,
         sort_order: maxSort + 1,
@@ -609,6 +676,7 @@ export class SupabaseRealtimeStore implements DataStore {
       isBuiltin: r.is_builtin,
       sortOrder: r.sort_order,
       createdAt: r.created_at,
+      deletedAt: null,
     };
   }
 

@@ -1,4 +1,10 @@
-export type ExerciseCategory = 'pullup' | 'barbell' | 'dumbbell' | 'bodyweight' | 'machine';
+export type ExerciseCategory =
+  | 'pullup'
+  | 'barbell'
+  | 'dumbbell'
+  | 'dumbbell_single'
+  | 'bodyweight'
+  | 'machine';
 
 export type PullupMode = 'assisted' | 'bodyweight' | 'weighted';
 
@@ -21,6 +27,7 @@ export interface Lifter {
   avatarColor: string;
   isAdmin: boolean;
   createdAt: string;
+  deletedAt?: string | null;
 }
 
 export interface Exercise {
@@ -30,6 +37,7 @@ export interface Exercise {
   isBuiltin: boolean;
   sortOrder: number;
   createdAt: string;
+  deletedAt?: string | null;
 }
 
 export interface WorkoutSession {

@@ -297,7 +297,7 @@ describe('Barbell Buddy PWA (Suomi)', () => {
       8, 9, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40,
     ]);
 
-    // Custom dumbbell exercise uses exact same dumbbell stop array
+    // Custom dumbbell (x2) exercise uses exact 8..40 dumbbell stop array
     expect(
       getRawWeightOptionsForExercise({
         id: 'ex-custom-curl',
@@ -308,6 +308,34 @@ describe('Barbell Buddy PWA (Suomi)', () => {
         createdAt: '2026-11-24T00:00:00.000Z',
       }),
     ).toEqual([8, 9, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40]);
+
+    // Single dumbbell ("Käsipaino (x1)") uses 1..10 by 1, then 12..40 by 2
+    expect(
+      getRawWeightOptionsForExercise({
+        id: 'ex-yliveto',
+        name: 'Yliveto',
+        category: 'dumbbell_single',
+        isBuiltin: false,
+        sortOrder: 101,
+        createdAt: '2026-11-24T00:00:00.000Z',
+      }),
+    ).toEqual([
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40,
+    ]);
+
+    // Machine / Cable ("Laite / Talja") starts at 2.5 kg up to 120 kg
+    const machineOpts = getRawWeightOptionsForExercise({
+      id: 'ex-lat-pulldown',
+      name: 'Ylätalja',
+      category: 'machine',
+      isBuiltin: false,
+      sortOrder: 102,
+      createdAt: '2026-11-24T00:00:00.000Z',
+    });
+    expect(machineOpts[0]).toBe(2.5);
+    expect(machineOpts[1]).toBe(5);
+    expect(machineOpts[machineOpts.length - 1]).toBe(120);
+    expect(machineOpts).toHaveLength(48);
 
     // Custom bodyweight exercise uses ['Bodyweight']
     expect(
@@ -1137,6 +1165,251 @@ describe('Barbell Buddy PWA (Suomi)', () => {
     expect(
       await screen.findByRole('heading', { name: 'Bulgarialainen kyykky (kp)' }),
     ).toBeInTheDocument();
+
+    store.dispose();
+  });
+
+  it('supports Käsipaino (x1) vs Käsipaino (x2), migrates Yliveto to Käsipaino (x1) with Paino title, and shows 1RM calculation info in Kehitys', async () => {
+    const user = userEvent.setup();
+    localStorage.setItem(
+      'test-yliveto-migration',
+      JSON.stringify({
+        migratedV2: true,
+        lifters: [
+          { id: 'lifter-julie', name: 'Julie', avatarColor: '#ec4899', isAdmin: false, createdAt: '2026-01-01T00:00:00Z' },
+          { id: 'lifter-joel', name: 'Joel', avatarColor: '#10b981', isAdmin: true, createdAt: '2026-01-01T00:00:01Z' },
+        ],
+        exercises: [
+          ...STARTER_EXERCISES,
+          {
+            id: 'ex-yliveto',
+            name: 'Yliveto',
+            category: 'dumbbell',
+            isBuiltin: false,
+            sortOrder: 6,
+            createdAt: '2026-11-20T00:00:00Z',
+          },
+        ],
+        sessions: [],
+        sets: [],
+      }),
+    );
+
+    const store = new LocalRealtimeStore({ storageKey: 'test-yliveto-migration' });
+    await store.initialize();
+
+    const yliveto = store.getSnapshot().exercises.find((e) => e.name === 'Yliveto')!;
+    expect(yliveto.category).toBe('dumbbell_single');
+
+    localStorage.setItem('yliveto-user', 'lifter-julie');
+    render(<App store={store} mainUserStorageKey="yliveto-user" />);
+
+    await user.click(await screen.findByRole('button', { name: /Uusi treeni/i }));
+    await user.click(screen.getByRole('button', { name: /Aloita treeni/i }));
+
+    // Vinopenkki käsipainoilla (Käsipaino x2) shows "Paino (x2)"
+    await user.selectOptions(screen.getByLabelText('Liike'), 'ex-incline-db-bench');
+    expect(screen.getByRole('slider', { name: 'Paino (x2)' })).toBeInTheDocument();
+
+    // Yliveto (migrated to Käsipaino x1) shows "Paino" (NOT "Paino (x2)") and starts from 1 kg stop
+    await user.selectOptions(screen.getByLabelText('Liike'), 'ex-yliveto');
+    expect(screen.queryByRole('slider', { name: 'Paino (x2)' })).not.toBeInTheDocument();
+    const weightSlider = screen.getByRole('slider', { name: 'Paino' });
+    fireEvent.change(weightSlider, { target: { value: '0' } });
+    expect(weightSlider).toHaveAttribute('aria-valuetext', '1 kg');
+    fireEvent.change(weightSlider, { target: { value: '11' } }); // 14 kg
+    expect(weightSlider).toHaveAttribute('aria-valuetext', '14 kg');
+
+    await user.click(screen.getByRole('button', { name: /Lisää sarja \(Julie\)/i }));
+    expect(await screen.findByText(/^14 kg × \d+ toistoa$/i)).toBeInTheDocument();
+
+    // Verify exercise creation options in Asetukset show both Käsipaino (x2) and Käsipaino (x1)
+    await user.click(screen.getByRole('tab', { name: /Asetukset/i }));
+    const categorySelect = screen.getByLabelText('Hallittavan uuden liikkeen kategoria');
+    expect(
+      within(categorySelect).getByRole('option', { name: /Käsipaino \(x2\)/i }),
+    ).toBeInTheDocument();
+    expect(
+      within(categorySelect).getByRole('option', { name: /Käsipaino \(x1\)/i }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText('Käsipaino (x1) (kg)').length).toBeGreaterThanOrEqual(2);
+
+    // Verify "Miten Arvioitu 1RM lasketaan?" dropdown in Kehitys tab
+    await user.click(screen.getByRole('tab', { name: /Kehitys/i }));
+    expect(screen.queryByTestId('e1rm-info-dropdown')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Arvioitu 1RM/i }));
+    const infoContainer = await screen.findByTestId('e1rm-info-dropdown');
+    const infoBtn = within(infoContainer).getByRole('button', {
+      name: /Miten Arvioitu 1RM lasketaan\?/i,
+    });
+    expect(infoBtn).toHaveAttribute('aria-expanded', 'false');
+
+    await user.click(infoBtn);
+    expect(infoBtn).toHaveAttribute('aria-expanded', 'true');
+    expect(
+      within(infoContainer).getByText(/Arvioitu 1RM = paino × \(1 \+ toistot \/ 30\)/i),
+    ).toBeInTheDocument();
+
+    store.dispose();
+  });
+
+  it('auto-collapses previous exercises on logging the next exercise, shows a 1-second toast, and preserves exercise/reps/weight across tab switches', async () => {
+    const user = userEvent.setup();
+    const store = new LocalRealtimeStore({ storageKey: 'test-collapse-toast-persist' });
+    await store.initialize();
+
+    localStorage.setItem('ux-flow-user', 'lifter-julie');
+    render(<App store={store} mainUserStorageKey="ux-flow-user" />);
+
+    await user.click(await screen.findByRole('button', { name: /Uusi treeni/i }));
+    await user.click(screen.getByRole('button', { name: /Aloita treeni/i }));
+
+    // 1. Select Penkkipunnerrus and log a set -> shows 1-second confirmation toast & expanded group
+    await user.selectOptions(screen.getByLabelText('Liike'), 'ex-bench-press');
+    await user.click(screen.getByRole('button', { name: /Lisää sarja \(Julie\)/i }));
+
+    expect(await screen.findByTestId('set-added-toast')).toHaveTextContent(/Sarja lisätty!/i);
+
+    const benchGroup = screen.getByTestId('session-exercise-group-ex-bench-press');
+    const benchToggle = within(benchGroup).getByRole('button', { name: /Penkkipunnerrus/i });
+    expect(benchToggle).toHaveAttribute('aria-expanded', 'true');
+    expect(within(benchGroup).getByText(/60 kg × 6 toistoa/i)).toBeInTheDocument();
+
+    // Toast automatically disappears after ~1 second
+    await waitFor(
+      () => {
+        expect(screen.queryByTestId('set-added-toast')).not.toBeInTheDocument();
+      },
+      { timeout: 1600 },
+    );
+
+    // 2. Switch to Kyykky and mark its first set -> Penkkipunnerrus collapses into a dropdown, Kyykky expands
+    await user.selectOptions(screen.getByLabelText('Liike'), 'ex-squat');
+    await user.click(screen.getByRole('button', { name: /Lisää sarja \(Julie\)/i }));
+
+    const squatGroup = await screen.findByTestId('session-exercise-group-ex-squat');
+    const squatToggle = within(squatGroup).getByRole('button', { name: /Kyykky/i });
+    expect(squatToggle).toHaveAttribute('aria-expanded', 'true');
+    expect(benchToggle).toHaveAttribute('aria-expanded', 'false');
+    expect(within(benchGroup).queryByText(/60 kg × 6 toistoa/i)).not.toBeInTheDocument();
+
+    // Clicking the collapsed Penkkipunnerrus dropdown makes its sets viewable again
+    await user.click(benchToggle);
+    expect(benchToggle).toHaveAttribute('aria-expanded', 'true');
+    expect(within(benchGroup).getByText(/60 kg × 6 toistoa/i)).toBeInTheDocument();
+
+    // 3. Select Maastaveto and customize Toistot (12) & Paino (95 kg -> index 28), then switch Treeni -> Historia -> Treeni
+    await user.selectOptions(screen.getByLabelText('Liike'), 'ex-deadlift');
+    fireEvent.change(screen.getByRole('slider', { name: 'Toistot' }), {
+      target: { value: '11' }, // 12 toistoa
+    });
+    fireEvent.change(screen.getByRole('slider', { name: 'Paino' }), {
+      target: { value: '28' }, // 25 + 28 * 2.5 = 95 kg
+    });
+
+    expect(screen.getByRole('slider', { name: 'Toistot' })).toHaveAttribute(
+      'aria-valuetext',
+      '12 toistoa',
+    );
+    expect(screen.getByRole('slider', { name: 'Paino' })).toHaveAttribute(
+      'aria-valuetext',
+      '95 kg',
+    );
+
+    await user.click(screen.getByRole('tab', { name: /Historia/i }));
+    expect(await screen.findByText(/Aiemmat treenit/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: /Treeni/i }));
+    expect(await screen.findByLabelText('Liike')).toHaveValue('ex-deadlift');
+    expect(screen.getByRole('slider', { name: 'Toistot' })).toHaveAttribute(
+      'aria-valuetext',
+      '12 toistoa',
+    );
+    expect(screen.getByRole('slider', { name: 'Paino' })).toHaveAttribute(
+      'aria-valuetext',
+      '95 kg',
+    );
+
+    store.dispose();
+  });
+
+  it('preserves historical data when Joel soft-deletes a user or exercise and restores it automatically when re-added', async () => {
+    const user = userEvent.setup();
+    const store = new LocalRealtimeStore({ storageKey: 'test-soft-delete-restore-entities' });
+    await store.initialize();
+
+    const sami = await store.addLifter({ name: 'Sami', avatarColor: '#06b6d4' });
+    const kulmasoutu = await store.addExercise({ name: 'Kulmasoutu', category: 'barbell' });
+
+    const sess = await store.createSession({
+      createdBy: sami.id,
+      participantIds: [sami.id, 'lifter-julie'],
+      sessionDate: '2026-11-15',
+      now: new Date(2026, 10, 15, 16, 0, 0),
+    });
+    await store.addSet({
+      sessionId: sess.id,
+      lifterId: sami.id,
+      exerciseId: 'ex-bench-press',
+      weightKg: 102.5,
+      reps: 5,
+      loggedBy: sami.id,
+    });
+    await store.addSet({
+      sessionId: sess.id,
+      lifterId: 'lifter-julie',
+      exerciseId: kulmasoutu.id,
+      weightKg: 45,
+      reps: 8,
+      loggedBy: 'lifter-julie',
+    });
+    await store.endSession(sess.id, new Date(2026, 10, 15, 17, 0, 0));
+
+    // Joel accidentally deletes both Sami and Kulmasoutu
+    await store.deleteLifter(sami.id, 'lifter-joel');
+    await store.deleteExercise(kulmasoutu.id, 'lifter-joel');
+
+    expect(store.getSnapshot().lifters.some((l) => l.name === 'Sami')).toBe(false);
+    expect(store.getSnapshot().exercises.some((e) => e.name === 'Kulmasoutu')).toBe(false);
+    expect(store.getSnapshot().sets).toHaveLength(0);
+
+    // Adding an exercise with the SAME name ("Kulmasoutu") but a DIFFERENT weight type ('dumbbell_single') creates a new exercise without restoring barbell sets
+    const kulmasoutuSingleDb = await store.addExercise({
+      name: 'Kulmasoutu',
+      category: 'dumbbell_single',
+    });
+    expect(kulmasoutuSingleDb.id).not.toBe(kulmasoutu.id);
+    expect(store.getSnapshot().sets).toHaveLength(0);
+    await store.deleteExercise(kulmasoutuSingleDb.id, 'lifter-joel');
+
+    // Re-adding Sami (same name) and Kulmasoutu with its original weight type ('barbell') restores their original IDs and all historical sets!
+    localStorage.setItem('restore-entities-user', 'lifter-julie');
+    render(<App store={store} mainUserStorageKey="restore-entities-user" />);
+
+    await user.click(await screen.findByRole('tab', { name: /Asetukset/i }));
+    await user.type(screen.getByLabelText('Uuden käyttäjän nimi'), 'sami');
+    await user.click(screen.getByRole('button', { name: 'Lisää käyttäjä' }));
+
+    await user.selectOptions(
+      screen.getByLabelText('Hallittavan uuden liikkeen kategoria'),
+      'barbell',
+    );
+    await user.type(screen.getByLabelText('Hallittavan uuden liikkeen nimi'), 'Kulmasoutu');
+    await user.click(screen.getByRole('button', { name: 'Lisää liike' }));
+
+    await waitFor(() => {
+      expect(store.getSnapshot().sets).toHaveLength(2);
+    });
+    expect(store.getSnapshot().lifters.find((l) => l.id === sami.id)).toBeTruthy();
+    expect(store.getSnapshot().exercises.find((e) => e.id === kulmasoutu.id)).toBeTruthy();
+
+    // Open Historia and verify both Sami's Bench Press and Julie's Kulmasoutu sets are back
+    await user.click(screen.getByRole('tab', { name: /Historia/i }));
+    const histCard = await screen.findByRole('button', { name: /2026-11-15/i });
+    await user.click(histCard);
+    expect(await screen.findByText(/102\.5 kg × 5 toistoa/i)).toBeInTheDocument();
+    expect(screen.getByText(/45 kg × 8 toistoa/i)).toBeInTheDocument();
 
     store.dispose();
   });

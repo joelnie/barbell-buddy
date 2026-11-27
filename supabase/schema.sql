@@ -8,11 +8,15 @@ create extension if not exists "pgcrypto";
 -- 1. Lifters (Users)
 create table if not exists public.lifters (
   id uuid primary key default gen_random_uuid(),
-  name text not null unique,
+  name text not null,
   avatar_color text not null default '#10b981',
   is_admin boolean not null default false,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  deleted_at timestamptz
 );
+
+alter table public.lifters
+  add column if not exists deleted_at timestamptz;
 
 -- 2. Admin Config (Salted bcrypt hash for admin PIN verification; never plaintext)
 create table if not exists public.admin_config (
@@ -23,12 +27,58 @@ create table if not exists public.admin_config (
 -- 3. Exercises
 create table if not exists public.exercises (
   id uuid primary key default gen_random_uuid(),
-  name text not null unique,
-  category text not null check (category in ('pullup', 'barbell', 'dumbbell', 'bodyweight', 'machine')),
+  name text not null,
+  category text not null check (category in ('pullup', 'barbell', 'dumbbell', 'dumbbell_single', 'bodyweight', 'machine')),
   is_builtin boolean not null default false,
   sort_order int not null default 100,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  deleted_at timestamptz
 );
+
+alter table public.exercises
+  add column if not exists deleted_at timestamptz;
+
+do $$
+declare
+  con record;
+begin
+  for con in
+    select c.conname
+    from pg_constraint c
+    join pg_class t on c.conrelid = t.oid
+    join pg_namespace n on t.relnamespace = n.oid
+    where n.nspname = 'public'
+      and t.relname = 'exercises'
+      and c.contype = 'c'
+      and pg_get_constraintdef(c.oid) ilike '%category%'
+  loop
+    execute format('alter table public.exercises drop constraint %I', con.conname);
+  end loop;
+
+  for con in
+    select c.conname, t.relname
+    from pg_constraint c
+    join pg_class t on c.conrelid = t.oid
+    join pg_namespace n on t.relnamespace = n.oid
+    where n.nspname = 'public'
+      and t.relname in ('lifters', 'exercises')
+      and c.contype = 'u'
+  loop
+    execute format('alter table public.%I drop constraint %I', con.relname, con.conname);
+  end loop;
+end $$;
+
+alter table public.exercises
+  add constraint exercises_category_check
+  check (category in ('pullup', 'barbell', 'dumbbell', 'dumbbell_single', 'bodyweight', 'machine'));
+
+create unique index if not exists idx_lifters_active_name_unique
+  on public.lifters (lower(btrim(name)))
+  where deleted_at is null;
+
+create unique index if not exists idx_exercises_active_name_unique
+  on public.exercises (lower(btrim(name)))
+  where deleted_at is null;
 
 -- 4. Workout Sessions (named by session_date YYYY-MM-DD)
 create table if not exists public.workout_sessions (
@@ -89,9 +139,9 @@ values
   ('Joel', '#10b981', true),
   ('Leevi', '#3b82f6', false),
   ('Tuomas', '#f59e0b', false)
-on conflict (name) do update
+on conflict ((lower(btrim(name)))) where deleted_at is null do update
   set avatar_color = excluded.avatar_color
-  where public.lifters.name = 'Julie';
+  where lower(btrim(public.lifters.name)) = 'julie';
 
 insert into public.admin_config (id, pin_hash)
 values (1, '$2a$10$cWJRkj1RiRAB2at9tyuMMeLSuRFJvMdlfYw9kOuBGUDvLoY8KvJB.')
@@ -104,7 +154,11 @@ values
   ('Vinopenkki käsipainoilla', 'dumbbell', true, 3),
   ('Maastaveto', 'barbell', true, 4),
   ('Kyykky', 'barbell', true, 5)
-on conflict (name) do nothing;
+on conflict ((lower(btrim(name)))) where deleted_at is null do nothing;
+
+update public.exercises
+set category = 'dumbbell_single'
+where lower(btrim(name)) = 'yliveto';
 
 -- =============================================================================
 -- Row Level Security (RLS)
@@ -216,7 +270,10 @@ declare
   actor_is_admin boolean;
   target_is_admin boolean;
 begin
-  select is_admin into actor_is_admin from public.lifters where id = acting_lifter_id;
+  select is_admin into actor_is_admin
+  from public.lifters
+  where id = acting_lifter_id and deleted_at is null;
+
   if coalesce(actor_is_admin, false) is not true then
     raise exception 'Vain Joel (ylläpitäjä) voi poistaa käyttäjiä.';
   end if;
@@ -225,12 +282,21 @@ begin
     raise exception 'Ylläpitäjä ei voi poistaa omaa käyttäjätiliään.';
   end if;
 
-  select is_admin into target_is_admin from public.lifters where id = target_lifter_id;
+  select is_admin into target_is_admin
+  from public.lifters
+  where id = target_lifter_id and deleted_at is null;
+
+  if target_is_admin is null then
+    raise exception 'Käyttäjää ei löytynyt.';
+  end if;
+
   if coalesce(target_is_admin, false) is true then
     raise exception 'Ylläpitäjää ei voi poistaa.';
   end if;
 
-  delete from public.lifters where id = target_lifter_id;
+  update public.lifters
+  set deleted_at = now()
+  where id = target_lifter_id and deleted_at is null;
 end;
 $$;
 
@@ -243,12 +309,21 @@ as $$
 declare
   actor_is_admin boolean;
 begin
-  select is_admin into actor_is_admin from public.lifters where id = acting_lifter_id;
+  select is_admin into actor_is_admin
+  from public.lifters
+  where id = acting_lifter_id and deleted_at is null;
+
   if coalesce(actor_is_admin, false) is not true then
     raise exception 'Vain Joel (ylläpitäjä) voi poistaa liikkeitä.';
   end if;
 
-  delete from public.exercises where id = target_exercise_id;
+  update public.exercises
+  set deleted_at = now()
+  where id = target_exercise_id and deleted_at is null;
+
+  if not found then
+    raise exception 'Liikettä ei löytynyt.';
+  end if;
 end;
 $$;
 
@@ -261,7 +336,10 @@ as $$
 declare
   actor_is_admin boolean;
 begin
-  select is_admin into actor_is_admin from public.lifters where id = acting_lifter_id;
+  select is_admin into actor_is_admin
+  from public.lifters
+  where id = acting_lifter_id and deleted_at is null;
+
   if coalesce(actor_is_admin, false) is not true then
     raise exception 'Vain Joel (ylläpitäjä) voi palauttaa poistettuja treenejä.';
   end if;
@@ -292,7 +370,10 @@ declare
   actor_is_admin boolean;
   trimmed_name text;
 begin
-  select is_admin into actor_is_admin from public.lifters where id = acting_lifter_id;
+  select is_admin into actor_is_admin
+  from public.lifters
+  where id = acting_lifter_id and deleted_at is null;
+
   if coalesce(actor_is_admin, false) is not true then
     raise exception 'Vain Joel (ylläpitäjä) voi muokata liikkeiden nimiä.';
   end if;
@@ -306,18 +387,137 @@ begin
     select 1
     from public.exercises
     where id <> target_exercise_id
-      and lower(name) = lower(trimmed_name)
+      and deleted_at is null
+      and lower(btrim(name)) = lower(trimmed_name)
   ) then
     raise exception 'Liike "%" on jo olemassa.', trimmed_name;
   end if;
 
   update public.exercises
   set name = trimmed_name
-  where id = target_exercise_id;
+  where id = target_exercise_id and deleted_at is null;
 
   if not found then
     raise exception 'Liikettä ei löytynyt.';
   end if;
+end;
+$$;
+
+create or replace function public.add_or_restore_lifter(
+  new_name text,
+  new_avatar_color text default '#10b981'
+)
+returns public.lifters
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_trimmed text;
+  v_color text;
+  v_row public.lifters;
+begin
+  v_trimmed := btrim(coalesce(new_name, ''));
+  if v_trimmed = '' then
+    raise exception 'Anna uuden käyttäjän nimi.';
+  end if;
+
+  v_color := coalesce(nullif(btrim(new_avatar_color), ''), '#10b981');
+
+  if exists (
+    select 1
+    from public.lifters
+    where deleted_at is null
+      and lower(btrim(name)) = lower(v_trimmed)
+  ) then
+    raise exception 'Käyttäjä nimeltä "%" on jo olemassa.', v_trimmed;
+  end if;
+
+  select *
+  into v_row
+  from public.lifters
+  where deleted_at is not null
+    and lower(btrim(name)) = lower(v_trimmed)
+  order by deleted_at desc nulls last
+  limit 1;
+
+  if found then
+    update public.lifters
+    set deleted_at = null,
+        name = v_trimmed,
+        avatar_color = v_color
+    where id = v_row.id
+    returning * into v_row;
+    return v_row;
+  end if;
+
+  insert into public.lifters (name, avatar_color, is_admin, deleted_at)
+  values (v_trimmed, v_color, false, null)
+  returning * into v_row;
+
+  return v_row;
+end;
+$$;
+
+create or replace function public.add_or_restore_exercise(
+  new_name text,
+  new_category text
+)
+returns public.exercises
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_trimmed text;
+  v_cat text;
+  v_max_sort int;
+  v_row public.exercises;
+begin
+  v_trimmed := btrim(coalesce(new_name, ''));
+  if v_trimmed = '' then
+    raise exception 'Anna liikkeen nimi.';
+  end if;
+
+  v_cat := btrim(coalesce(new_category, ''));
+  if v_cat not in ('pullup', 'barbell', 'dumbbell', 'dumbbell_single', 'bodyweight', 'machine') then
+    raise exception 'Virheellinen liikkeen kategoria.';
+  end if;
+
+  if exists (
+    select 1
+    from public.exercises
+    where deleted_at is null
+      and lower(btrim(name)) = lower(v_trimmed)
+  ) then
+    raise exception 'Liike "%" on jo olemassa.', v_trimmed;
+  end if;
+
+  select *
+  into v_row
+  from public.exercises
+  where deleted_at is not null
+    and lower(btrim(name)) = lower(v_trimmed)
+    and category = v_cat
+  order by deleted_at desc nulls last
+  limit 1;
+
+  if found then
+    update public.exercises
+    set deleted_at = null,
+        name = v_trimmed
+    where id = v_row.id
+    returning * into v_row;
+    return v_row;
+  end if;
+
+  select coalesce(max(sort_order), 0) into v_max_sort from public.exercises;
+
+  insert into public.exercises (name, category, is_builtin, sort_order, deleted_at)
+  values (v_trimmed, v_cat, false, v_max_sort + 1, null)
+  returning * into v_row;
+
+  return v_row;
 end;
 $$;
 
@@ -326,6 +526,8 @@ grant execute on function public.admin_delete_lifter(uuid, uuid) to authenticate
 grant execute on function public.admin_delete_exercise(uuid, uuid) to authenticated;
 grant execute on function public.admin_restore_session(uuid, uuid) to authenticated;
 grant execute on function public.admin_rename_exercise(uuid, text, uuid) to authenticated;
+grant execute on function public.add_or_restore_lifter(text, text) to authenticated;
+grant execute on function public.add_or_restore_exercise(text, text) to authenticated;
 
 -- =============================================================================
 -- Supabase Realtime Publication
