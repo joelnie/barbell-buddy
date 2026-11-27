@@ -99,20 +99,26 @@ export function SessionTab() {
     }
   }, [mainUser?.id, activeSessionForMainUser?.id]);
 
+  // Resolve active logging lifter synchronously so first render never flashes empty selection
+  const effectiveLifterId = useMemo(() => {
+    if (!activeSessionForMainUser) {
+      return mainUser?.id ?? '';
+    }
+    if (selectedLifterId && activeSessionForMainUser.participantIds.includes(selectedLifterId)) {
+      return selectedLifterId;
+    }
+    if (mainUser && activeSessionForMainUser.participantIds.includes(mainUser.id)) {
+      return mainUser.id;
+    }
+    return activeSessionForMainUser.participantIds[0] ?? '';
+  }, [activeSessionForMainUser, mainUser, selectedLifterId]);
+
   // Keep selectedLifterId synced to participants of active session
   useEffect(() => {
-    if (!activeSessionForMainUser) {
-      setSelectedLifterId(mainUser?.id ?? '');
-      return;
+    if (effectiveLifterId !== selectedLifterId) {
+      setSelectedLifterId(effectiveLifterId);
     }
-    if (!activeSessionForMainUser.participantIds.includes(selectedLifterId)) {
-      setSelectedLifterId(
-        mainUser && activeSessionForMainUser.participantIds.includes(mainUser.id)
-          ? mainUser.id
-          : activeSessionForMainUser.participantIds[0] ?? '',
-      );
-    }
-  }, [activeSessionForMainUser, mainUser, selectedLifterId]);
+  }, [effectiveLifterId, selectedLifterId]);
 
   const selectedExercise = useMemo(
     () => snapshot.exercises.find((e) => e.id === selectedExerciseId) ?? snapshot.exercises[0],
@@ -127,21 +133,19 @@ export function SessionTab() {
   );
 
   const lastSetForSelection = useMemo(() => {
-    const targetLifterId = selectedLifterId || mainUser?.id || '';
-    if (!targetLifterId || !selectedExercise) return undefined;
+    if (!effectiveLifterId || !selectedExercise) return undefined;
     return getLastLoggedSetForLifterExercise(
       snapshot.sets,
-      targetLifterId,
+      effectiveLifterId,
       selectedExercise.id,
       snapshot.exercises,
       snapshot.sessions,
     );
-  }, [snapshot.sets, snapshot.exercises, snapshot.sessions, selectedLifterId, mainUser?.id, selectedExercise]);
+  }, [snapshot.sets, snapshot.exercises, snapshot.sessions, effectiveLifterId, selectedExercise]);
 
   // Default values for each user & exercise always start at the reps and weights they did last time
   useEffect(() => {
-    const targetLifterId = selectedLifterId || mainUser?.id || '';
-    if (!targetLifterId || !selectedExercise) return;
+    if (!effectiveLifterId || !selectedExercise) return;
     const stopsForExercise = getWeightSliderStopsForExercise(selectedExercise);
     setRepsIndex(resolveInitialRepsIndex(selectedExercise, lastSetForSelection));
     setWeightIndex(
@@ -149,8 +153,7 @@ export function SessionTab() {
     );
   }, [
     activeSessionForMainUser?.id,
-    selectedLifterId,
-    mainUser?.id,
+    effectiveLifterId,
     selectedExercise?.id,
     lastSetForSelection?.id,
     lastSetForSelection?.reps,
@@ -197,7 +200,7 @@ export function SessionTab() {
 
   const handleAddSet = async (e: FormEvent) => {
     e.preventDefault();
-    if (!activeSessionForMainUser || !selectedExercise || !selectedLifterId) return;
+    if (!activeSessionForMainUser || !selectedExercise || !effectiveLifterId) return;
     setFormError(null);
 
     const safeRepStop = repsStops[Math.max(0, Math.min(repsStops.length - 1, repsIndex))];
@@ -212,12 +215,12 @@ export function SessionTab() {
     try {
       await store.addSet({
         sessionId: activeSessionForMainUser.id,
-        lifterId: selectedLifterId,
+        lifterId: effectiveLifterId,
         exerciseId: selectedExercise.id,
         pullupMode,
         weightKg,
         reps: parsedReps,
-        loggedBy: mainUser?.id ?? selectedLifterId,
+        loggedBy: mainUser?.id ?? effectiveLifterId,
       });
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Sarjan kirjaaminen epäonnistui.');
@@ -582,7 +585,7 @@ export function SessionTab() {
               <span className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
                 Kenelle kirjataan
               </span>
-              {selectedLifterId !== mainUser.id && (
+              {effectiveLifterId !== mainUser.id && (
                 <span className="text-[11px] font-semibold" style={{ color: 'var(--accent-text)' }}>
                   Kirjataan kaverille
                 </span>
@@ -594,7 +597,7 @@ export function SessionTab() {
               }`}
             >
               {sessionParticipants.map((p) => {
-                const isSelected = p.id === selectedLifterId;
+                const isSelected = p.id === effectiveLifterId;
                 return (
                   <button
                     key={p.id}
@@ -733,7 +736,7 @@ export function SessionTab() {
           <button type="submit" className="bb-btn-primary flex w-full items-center justify-center gap-2 py-3.5 text-sm">
             <Plus className="h-4 w-4" />
             <span>
-              Lisää sarja ({lifterMap.get(selectedLifterId)?.name ?? 'Treenaaja'})
+              Lisää sarja ({lifterMap.get(effectiveLifterId)?.name ?? 'Treenaaja'})
             </span>
           </button>
         </form>
