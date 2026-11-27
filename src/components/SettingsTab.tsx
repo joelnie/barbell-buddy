@@ -1,6 +1,8 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import {
   Check,
+  ChevronDown,
+  ChevronUp,
   Dumbbell,
   Lock,
   Palette,
@@ -38,10 +40,17 @@ export function SettingsTab() {
   const [confirmDeleteExerciseId, setConfirmDeleteExerciseId] = useState<string | null>(null);
   const [renamingExerciseId, setRenamingExerciseId] = useState<string | null>(null);
   const [renameExerciseInput, setRenameExerciseInput] = useState('');
+  const [isDeletedDropdownOpen, setIsDeletedDropdownOpen] = useState<boolean>(false);
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
 
   const isJoelAdmin = Boolean(mainUser?.isAdmin);
+
+  useEffect(() => {
+    if (!isJoelAdmin) {
+      setIsDeletedDropdownOpen(false);
+    }
+  }, [isJoelAdmin]);
 
   const lifterMap = useMemo(
     () => new Map(snapshot.lifters.map((l) => [l.id, l])),
@@ -679,159 +688,186 @@ export function SettingsTab() {
         </div>
       </section>
 
-      {/* 6. Joel (Admin) Only: Deleted Sessions & Restore */}
+      {/* 6. Joel (Admin) Only: Deleted Sessions Collapsible Dropdown (collapsed by default) */}
       {isJoelAdmin && (
         <section
           data-testid="deleted-sessions-section"
           aria-label="Poistetut treenit"
-          className="bb-widget space-y-3.5 p-4"
+          className="bb-widget p-4"
         >
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-start gap-2">
-              <RotateCcw className="mt-0.5 h-4 w-4 shrink-0" style={{ color: 'var(--accent-text)' }} />
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-base font-extrabold">Poistetut treenit</h2>
-                  <span
-                    className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold"
-                    style={{
-                      backgroundColor: 'var(--accent-soft)',
-                      color: 'var(--accent-text)',
-                    }}
-                  >
-                    <ShieldCheck className="h-3 w-3" />
-                    Ylläpitäjä
-                  </span>
-                </div>
-                <p className="mt-0.5 text-xs" style={{ color: 'var(--text-muted)' }}>
-                  Palauta historiasta poistetut treenit ja kaikki niiden sarjat.
-                </p>
+          <button
+            type="button"
+            onClick={() => setIsDeletedDropdownOpen((prev) => !prev)}
+            aria-expanded={isDeletedDropdownOpen}
+            className="flex w-full items-center justify-between gap-3 text-left transition hover:opacity-95"
+          >
+            <div className="flex min-w-0 items-center gap-2">
+              <RotateCcw className="h-4 w-4 shrink-0" style={{ color: 'var(--accent-text)' }} />
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-base font-extrabold">Poistetut treenit</span>
+                <span
+                  className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold"
+                  style={{
+                    backgroundColor: 'var(--accent-soft)',
+                    color: 'var(--accent-text)',
+                  }}
+                >
+                  <ShieldCheck className="h-3 w-3" />
+                  Ylläpitäjä
+                </span>
               </div>
             </div>
 
-            <span
-              className="shrink-0 rounded-full px-2.5 py-1 text-xs font-bold"
-              style={{
-                backgroundColor: 'var(--accent-soft)',
-                color: 'var(--accent-text)',
-              }}
-            >
-              {deletedSessions.length}
-            </span>
-          </div>
-
-          {restoreError && (
-            <p
-              role="alert"
-              className="rounded-xl px-3 py-2 text-xs font-semibold"
-              style={{ backgroundColor: 'var(--danger-soft)', color: 'var(--danger)' }}
-            >
-              {restoreError}
-            </p>
-          )}
-          {restoreMessage && (
-            <p className="text-xs font-semibold" style={{ color: 'var(--accent-text)' }}>
-              {restoreMessage}
-            </p>
-          )}
-
-          {deletedSessions.length === 0 ? (
-            <div className="bb-subcard px-3.5 py-3 text-xs" style={{ color: 'var(--text-muted)' }}>
-              Ei poistettuja treenejä.
+            <div className="flex shrink-0 items-center gap-2">
+              <span
+                className="rounded-full px-2.5 py-0.5 text-xs font-bold"
+                style={{
+                  backgroundColor: 'var(--accent-soft)',
+                  color: 'var(--accent-text)',
+                }}
+              >
+                {deletedSessions.length}
+              </span>
+              <span
+                className="flex items-center gap-1 text-xs font-bold"
+                style={{ color: 'var(--accent-text)' }}
+              >
+                <span>{isDeletedDropdownOpen ? 'Piilota' : 'Näytä'}</span>
+                {isDeletedDropdownOpen ? (
+                  <ChevronUp className="h-4 w-4" />
+                ) : (
+                  <ChevronDown className="h-4 w-4" />
+                )}
+              </span>
             </div>
-          ) : (
-            <div className="space-y-2.5">
-              {deletedSessions.map((session) => {
-                const sessionSets = snapshot.sets.filter((s) => s.sessionId === session.id);
-                const participants = session.participantIds
-                  .map((id) => lifterMap.get(id))
-                  .filter((l): l is NonNullable<typeof l> => Boolean(l));
-                const uniqueExercises = Array.from(
-                  new Set(
-                    sessionSets
-                      .map((s) => exerciseMap.get(s.exerciseId)?.name)
-                      .filter((n): n is string => Boolean(n)),
-                  ),
-                );
+          </button>
 
-                return (
-                  <div
-                    key={session.id}
-                    data-testid={`deleted-session-card-${session.id}`}
-                    className="bb-subcard flex items-center justify-between gap-3 p-3"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-sm font-extrabold">{session.sessionDate}</span>
-                        <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-                          {formatTimeShort(session.startedAt)}
-                        </span>
-                        <span
-                          className="rounded-full px-2 py-0.5 text-[10px] font-bold"
-                          style={{
-                            backgroundColor: 'var(--bg-surface)',
-                            color: 'var(--text-secondary)',
-                          }}
-                        >
-                          {sessionSets.length} {sessionSets.length === 1 ? 'sarja' : 'sarjaa'}
-                        </span>
-                      </div>
+          {isDeletedDropdownOpen && (
+            <div
+              className="mt-3.5 space-y-3 border-t pt-3.5"
+              style={{ borderColor: 'var(--border-subtle)' }}
+            >
+              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                Palauta historiasta poistetut treenit ja kaikki niiden sarjat.
+              </p>
 
-                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                        {participants.map((p) => (
-                          <span
-                            key={p.id}
-                            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold"
-                            style={{
-                              backgroundColor: 'var(--bg-surface)',
-                              border: '1px solid var(--border-subtle)',
-                            }}
-                          >
+              {restoreError && (
+                <p
+                  role="alert"
+                  className="rounded-xl px-3 py-2 text-xs font-semibold"
+                  style={{ backgroundColor: 'var(--danger-soft)', color: 'var(--danger)' }}
+                >
+                  {restoreError}
+                </p>
+              )}
+              {restoreMessage && (
+                <p className="text-xs font-semibold" style={{ color: 'var(--accent-text)' }}>
+                  {restoreMessage}
+                </p>
+              )}
+
+              {deletedSessions.length === 0 ? (
+                <div
+                  className="bb-subcard px-3.5 py-3 text-xs"
+                  style={{ color: 'var(--text-muted)' }}
+                >
+                  Ei poistettuja treenejä.
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {deletedSessions.map((session) => {
+                    const sessionSets = snapshot.sets.filter((s) => s.sessionId === session.id);
+                    const participants = session.participantIds
+                      .map((id) => lifterMap.get(id))
+                      .filter((l): l is NonNullable<typeof l> => Boolean(l));
+                    const uniqueExercises = Array.from(
+                      new Set(
+                        sessionSets
+                          .map((s) => exerciseMap.get(s.exerciseId)?.name)
+                          .filter((n): n is string => Boolean(n)),
+                      ),
+                    );
+
+                    return (
+                      <div
+                        key={session.id}
+                        data-testid={`deleted-session-card-${session.id}`}
+                        className="bb-subcard flex items-center justify-between gap-3 p-3"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-sm font-extrabold">{session.sessionDate}</span>
+                            <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                              {formatTimeShort(session.startedAt)}
+                            </span>
                             <span
-                              className="h-2 w-2 rounded-full"
-                              style={{ backgroundColor: p.avatarColor }}
-                            />
-                            {p.name}
-                          </span>
-                        ))}
-                      </div>
+                              className="rounded-full px-2 py-0.5 text-[10px] font-bold"
+                              style={{
+                                backgroundColor: 'var(--bg-surface)',
+                                color: 'var(--text-secondary)',
+                              }}
+                            >
+                              {sessionSets.length} {sessionSets.length === 1 ? 'sarja' : 'sarjaa'}
+                            </span>
+                          </div>
 
-                      {uniqueExercises.length > 0 && (
-                        <p
-                          className="mt-1 truncate text-[11px]"
-                          style={{ color: 'var(--text-muted)' }}
+                          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                            {participants.map((p) => (
+                              <span
+                                key={p.id}
+                                className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                                style={{
+                                  backgroundColor: 'var(--bg-surface)',
+                                  border: '1px solid var(--border-subtle)',
+                                }}
+                              >
+                                <span
+                                  className="h-2 w-2 rounded-full"
+                                  style={{ backgroundColor: p.avatarColor }}
+                                />
+                                {p.name}
+                              </span>
+                            ))}
+                          </div>
+
+                          {uniqueExercises.length > 0 && (
+                            <p
+                              className="mt-1 truncate text-[11px]"
+                              style={{ color: 'var(--text-muted)' }}
+                            >
+                              {uniqueExercises.join(' · ')}
+                            </p>
+                          )}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!mainUser) return;
+                            setRestoreError(null);
+                            setRestoreMessage(null);
+                            try {
+                              await store.restoreSession(session.id, mainUser.id);
+                              setRestoreMessage(`Palautettiin treeni ${session.sessionDate}!`);
+                            } catch (err) {
+                              setRestoreError(
+                                err instanceof Error
+                                  ? err.message
+                                  : 'Treenin palauttaminen epäonnistui.',
+                              );
+                            }
+                          }}
+                          aria-label={`Palauta treeni ${session.sessionDate}`}
+                          className="bb-btn-primary flex shrink-0 items-center gap-1.5 px-3 py-2 text-xs"
                         >
-                          {uniqueExercises.join(' · ')}
-                        </p>
-                      )}
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        if (!mainUser) return;
-                        setRestoreError(null);
-                        setRestoreMessage(null);
-                        try {
-                          await store.restoreSession(session.id, mainUser.id);
-                          setRestoreMessage(`Palautettiin treeni ${session.sessionDate}!`);
-                        } catch (err) {
-                          setRestoreError(
-                            err instanceof Error
-                              ? err.message
-                              : 'Treenin palauttaminen epäonnistui.',
-                          );
-                        }
-                      }}
-                      aria-label={`Palauta treeni ${session.sessionDate}`}
-                      className="bb-btn-primary flex shrink-0 items-center gap-1.5 px-3 py-2 text-xs"
-                    >
-                      <RotateCcw className="h-3.5 w-3.5" />
-                      <span>Palauta</span>
-                    </button>
-                  </div>
-                );
-              })}
+                          <RotateCcw className="h-3.5 w-3.5" />
+                          <span>Palauta</span>
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </section>

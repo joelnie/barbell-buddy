@@ -999,9 +999,22 @@ describe('Barbell Buddy PWA (Suomi)', () => {
     await user.click(screen.getByRole('tab', { name: /Historia/i }));
     expect(screen.queryByTestId('deleted-sessions-section')).not.toBeInTheDocument();
 
-    // In Asetukset, Joel sees Poistetut treenit at the bottom and restores 2026-11-18
+    // In Asetukset, Poistetut treenit dropdown starts collapsed by default so deleted sessions stay hidden until opened
     await user.click(screen.getByRole('tab', { name: /Asetukset/i }));
     const deletedSection = await screen.findByTestId('deleted-sessions-section');
+    const dropdownToggle = within(deletedSection).getByRole('button', {
+      name: /Poistetut treenit/i,
+    });
+    expect(dropdownToggle).toHaveAttribute('aria-expanded', 'false');
+    expect(
+      within(deletedSection).queryByTestId(`deleted-session-card-${sess.id}`),
+    ).not.toBeInTheDocument();
+    expect(within(deletedSection).queryByText('2026-11-18')).not.toBeInTheDocument();
+
+    // Expanding the Poistetut treenit dropdown reveals the deleted session and Palauta button
+    await user.click(dropdownToggle);
+    expect(dropdownToggle).toHaveAttribute('aria-expanded', 'true');
+
     const deletedCard = within(deletedSection).getByTestId(`deleted-session-card-${sess.id}`);
     expect(within(deletedCard).getByText('2026-11-18')).toBeInTheDocument();
     expect(within(deletedCard).getByText('1 sarja')).toBeInTheDocument();
