@@ -134,8 +134,9 @@ export function SessionTab() {
       targetLifterId,
       selectedExercise.id,
       snapshot.exercises,
+      snapshot.sessions,
     );
-  }, [snapshot.sets, snapshot.exercises, selectedLifterId, mainUser?.id, selectedExercise]);
+  }, [snapshot.sets, snapshot.exercises, snapshot.sessions, selectedLifterId, mainUser?.id, selectedExercise]);
 
   // Default values for each user & exercise always start at the reps and weights they did last time
   useEffect(() => {

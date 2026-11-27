@@ -41,6 +41,7 @@ export interface WorkoutSession {
   startedAt: string;
   endedAt: string | null;
   expiresAt: string; // 23:59:59.999 local time on sessionDate
+  deletedAt?: string | null;
 }
 
 export interface WorkoutSet {
@@ -101,12 +102,18 @@ export interface DataStore {
   addParticipantToSession(sessionId: string, lifterId: string, now?: Date): Promise<void>;
   endSession(sessionId: string, now?: Date): Promise<void>;
   deleteSession(sessionId: string): Promise<void>;
+  restoreSession(sessionId: string, actingLifterId: string): Promise<void>;
   addSet(input: AddSetInput): Promise<WorkoutSet>;
   updateSet(setId: string, patch: UpdateSetPatch): Promise<WorkoutSet>;
   deleteSet(setId: string): Promise<void>;
   addLifter(input: { name: string; avatarColor: string }): Promise<Lifter>;
   deleteLifter(targetLifterId: string, actingLifterId: string): Promise<void>;
   addExercise(input: { name: string; category: ExerciseCategory }): Promise<Exercise>;
+  renameExercise(
+    targetExerciseId: string,
+    newName: string,
+    actingLifterId: string,
+  ): Promise<Exercise>;
   deleteExercise(targetExerciseId: string, actingLifterId: string): Promise<void>;
   verifyAdminPin(pin: string): Promise<boolean>;
   dispose(): void;

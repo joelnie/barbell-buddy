@@ -502,13 +502,16 @@ describe('Barbell Buddy PWA (Suomi)', () => {
     await user.click(within(cardArticle).getByRole('button', { name: 'Peruuta' }));
     expect(within(cardArticle).queryByText(/Oletko varma\?/i)).not.toBeInTheDocument();
 
-    // Confirm removes the session and its sets
+    // Confirm soft-deletes the session from Historia while preserving sets for admin restoration
     await user.click(within(cardArticle).getByRole('button', { name: 'Poista treeni' }));
     await user.click(within(cardArticle).getByRole('button', { name: 'Poista' }));
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: /2026-11-20/i })).not.toBeInTheDocument();
     });
-    expect(store.getSnapshot().sets).toHaveLength(0);
+    expect(
+      store.getSnapshot().sessions.find((s) => s.id === session.id)?.deletedAt,
+    ).toBeTruthy();
+    expect(store.getSnapshot().sets).toHaveLength(1);
 
     store.dispose();
   });
@@ -928,5 +931,194 @@ describe('Barbell Buddy PWA (Suomi)', () => {
 
     storeJulie.dispose();
     storeLeevi.dispose();
+  });
+
+  it('allows only Joel (admin) to view and restore sessions deleted from Historia, restoring sets to Historia and Kehitys', async () => {
+    const user = userEvent.setup();
+    const store = new LocalRealtimeStore({ storageKey: 'test-admin-restore-session' });
+    await store.initialize();
+
+    // Create and finish a session with Bench Press PR for Julie
+    const sess = await store.createSession({
+      createdBy: 'lifter-julie',
+      participantIds: ['lifter-julie'],
+      sessionDate: '2026-11-18',
+      now: new Date(2026, 10, 18, 17, 0, 0),
+    });
+    await store.addSet({
+      sessionId: sess.id,
+      lifterId: 'lifter-julie',
+      exerciseId: 'ex-bench-press',
+      weightKg: 57.5,
+      reps: 6,
+      loggedBy: 'lifter-julie',
+    });
+    await store.endSession(sess.id, new Date(2026, 10, 18, 18, 0, 0));
+
+    localStorage.setItem('restore-test-user', 'lifter-julie');
+    render(<App store={store} mainUserStorageKey="restore-test-user" />);
+
+    // Verify PR appears in Kehitys before deletion
+    await user.click(await screen.findByRole('tab', { name: /Kehitys/i }));
+    expect(await screen.findByText('57.5 kg')).toBeInTheDocument();
+
+    // Delete the session from Historia as Julie
+    await user.click(screen.getByRole('tab', { name: /Historia/i }));
+    const sessionBtn = await screen.findByRole('button', { name: /2026-11-18/i });
+    const cardArticle = sessionBtn.closest('article')!;
+    await user.click(within(cardArticle).getByRole('button', { name: 'Poista treeni' }));
+    expect(
+      within(cardArticle).getByText(/Oletko varma\? Poistetaanko treeni historiasta\?/i),
+    ).toBeInTheDocument();
+    await user.click(within(cardArticle).getByRole('button', { name: 'Poista' }));
+
+    // Session disappears from Historia AND from Kehitys
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /2026-11-18/i })).not.toBeInTheDocument();
+    });
+    // Non-admin Julie cannot see Poistetut treenit or restore via store
+    expect(screen.queryByTestId('deleted-sessions-section')).not.toBeInTheDocument();
+    await expect(store.restoreSession(sess.id, 'lifter-julie')).rejects.toThrow(/Vain Joel/i);
+
+    await user.click(screen.getByRole('tab', { name: /Kehitys/i }));
+    expect(screen.queryByText('57.5 kg')).not.toBeInTheDocument();
+
+    // Switch to Joel (admin) via PIN
+    await user.click(screen.getByRole('tab', { name: /Asetukset/i }));
+    await user.click(screen.getByRole('button', { name: /Joel.*Vaatii 4-numeroisen PIN-koodin/i }));
+    await enterJoelKeypadPin(user, String(1290 * 2).split(''));
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('dialog', { name: /vaihda käyttäjäksi joel/i }),
+      ).not.toBeInTheDocument();
+    });
+
+    // Open Historia as Joel -> sees Poistetut treenit and restores 2026-11-18
+    await user.click(screen.getByRole('tab', { name: /Historia/i }));
+    const deletedSection = await screen.findByTestId('deleted-sessions-section');
+    const deletedCard = within(deletedSection).getByTestId(`deleted-session-card-${sess.id}`);
+    expect(within(deletedCard).getByText('2026-11-18')).toBeInTheDocument();
+    expect(within(deletedCard).getByText('1 sarja')).toBeInTheDocument();
+
+    await user.click(
+      within(deletedCard).getByRole('button', { name: /Palauta treeni 2026-11-18/i }),
+    );
+
+    // Deleted section disappears and the restored session + its set are back in Historia and Kehitys
+    await waitFor(() => {
+      expect(screen.queryByTestId('deleted-sessions-section')).not.toBeInTheDocument();
+    });
+    const restoredBtn = await screen.findByRole('button', { name: /2026-11-18/i });
+    await user.click(restoredBtn);
+    expect(await screen.findByText(/57\.5 kg × 6 toistoa/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: /Kehitys/i }));
+    expect(await screen.findByText('57.5 kg')).toBeInTheDocument();
+
+    store.dispose();
+  });
+
+  it('allows only Joel (admin) to rename exercises and applies the new name across Asetukset, Treeni, and Historia', async () => {
+    const user = userEvent.setup();
+    const store = new LocalRealtimeStore({ storageKey: 'test-admin-rename-exercise' });
+    await store.initialize();
+
+    const bulgarian = await store.addExercise({
+      name: 'Bulgarialainen kyykky',
+      category: 'dumbbell',
+    });
+
+    // Log a historical session with Bulgarialainen kyykky
+    const pastSess = await store.createSession({
+      createdBy: 'lifter-julie',
+      participantIds: ['lifter-julie'],
+      sessionDate: '2026-11-19',
+      now: new Date(2026, 10, 19, 17, 0, 0),
+    });
+    await store.addSet({
+      sessionId: pastSess.id,
+      lifterId: 'lifter-julie',
+      exerciseId: bulgarian.id,
+      weightKg: 16,
+      reps: 10,
+      loggedBy: 'lifter-julie',
+    });
+    await store.endSession(pastSess.id, new Date(2026, 10, 19, 18, 0, 0));
+
+    // Also start an active session for Joel with Bulgarialainen kyykky
+    const liveSess = await store.createSession({
+      createdBy: 'lifter-joel',
+      participantIds: ['lifter-joel'],
+    });
+    await store.addSet({
+      sessionId: liveSess.id,
+      lifterId: 'lifter-joel',
+      exerciseId: bulgarian.id,
+      weightKg: 24,
+      reps: 8,
+      loggedBy: 'lifter-joel',
+    });
+
+    localStorage.setItem('rename-test-user', 'lifter-julie');
+    render(<App store={store} mainUserStorageKey="rename-test-user" />);
+
+    // Non-admin Julie cannot see rename buttons or rename via store
+    await user.click(await screen.findByRole('tab', { name: /Asetukset/i }));
+    expect(
+      screen.queryByRole('button', { name: /Muokkaa liikkeen Bulgarialainen kyykky nimeä/i }),
+    ).not.toBeInTheDocument();
+    await expect(
+      store.renameExercise(bulgarian.id, 'Bulgarialainen kyykky (kp)', 'lifter-julie'),
+    ).rejects.toThrow(/Vain Joel/i);
+
+    // Switch to Joel (admin)
+    await user.click(screen.getByRole('button', { name: /Joel.*Vaatii 4-numeroisen PIN-koodin/i }));
+    await enterJoelKeypadPin(user, String(1290 * 2).split(''));
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('dialog', { name: /vaihda käyttäjäksi joel/i }),
+      ).not.toBeInTheDocument();
+    });
+
+    // Click rename pencil for Bulgarialainen kyykky
+    await user.click(
+      screen.getByRole('button', { name: /Muokkaa liikkeen Bulgarialainen kyykky nimeä/i }),
+    );
+    const renameInput = screen.getByLabelText(/Uusi nimi liikkeelle Bulgarialainen kyykky/i);
+
+    // Rejects duplicate name (e.g. "Kyykky")
+    await user.clear(renameInput);
+    await user.type(renameInput, 'Kyykky');
+    await user.click(
+      screen.getByRole('button', { name: /Tallenna liikkeen Bulgarialainen kyykky nimi/i }),
+    );
+    expect(await screen.findByText(/Liike "Kyykky" on jo olemassa/i)).toBeInTheDocument();
+
+    // Save valid new name: "Bulgarialainen kyykky (kp)"
+    await user.clear(renameInput);
+    await user.type(renameInput, 'Bulgarialainen kyykky (kp)');
+    await user.click(
+      screen.getByRole('button', { name: /Tallenna liikkeen Bulgarialainen kyykky nimi/i }),
+    );
+
+    expect(
+      await screen.findByText(/Liikkeen nimi päivitetty: Bulgarialainen kyykky \(kp\)/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Bulgarialainen kyykky (kp)')).toBeInTheDocument();
+
+    // Verify active session in Treeni shows the updated exercise name
+    await user.click(screen.getByRole('tab', { name: /Treeni/i }));
+    expect(await screen.findByRole('heading', { name: 'Bulgarialainen kyykky (kp)' })).toBeInTheDocument();
+
+    // Verify historical session in Historia also shows "Bulgarialainen kyykky (kp)"
+    await user.click(screen.getByRole('tab', { name: /Historia/i }));
+    const historyCardBtn = await screen.findByRole('button', { name: /2026-11-19/i });
+    expect(historyCardBtn).toHaveTextContent('Bulgarialainen kyykky (kp)');
+    await user.click(historyCardBtn);
+    expect(
+      await screen.findByRole('heading', { name: 'Bulgarialainen kyykky (kp)' }),
+    ).toBeInTheDocument();
+
+    store.dispose();
   });
 });
