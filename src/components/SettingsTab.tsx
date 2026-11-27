@@ -1,10 +1,12 @@
-import { useState, type FormEvent } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 import {
   Check,
   Dumbbell,
   Lock,
   Palette,
+  Pencil,
   RefreshCw,
+  RotateCcw,
   ShieldCheck,
   Sparkles,
   Trash2,
@@ -13,11 +15,12 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { SECONDARY_ACCENT_OPTIONS, useTheme } from '../context/ThemeContext';
+import { formatTimeShort } from '../lib/dates';
 import { AVATAR_COLOR_SWATCHES } from '../lib/seedData';
 import type { ExerciseCategory, ThemeMode } from '../types/models';
 
 export function SettingsTab() {
-  const { store, snapshot, mainUser, requestSwitchMainUser } = useApp();
+  const { store, snapshot, mainUser, deletedSessions, requestSwitchMainUser } = useApp();
   const { theme, accent, setTheme, setAccent } = useTheme();
 
   // Add Lifter form
@@ -27,13 +30,28 @@ export function SettingsTab() {
   const [userError, setUserError] = useState<string | null>(null);
   const [confirmDeleteLifterId, setConfirmDeleteLifterId] = useState<string | null>(null);
 
-  // Add Exercise form
+  // Add / Rename / Remove Exercise form
   const [newExerciseName, setNewExerciseName] = useState('');
   const [newExerciseCategory, setNewExerciseCategory] = useState<ExerciseCategory>('barbell');
   const [exerciseError, setExerciseError] = useState<string | null>(null);
+  const [exerciseMessage, setExerciseMessage] = useState<string | null>(null);
   const [confirmDeleteExerciseId, setConfirmDeleteExerciseId] = useState<string | null>(null);
+  const [renamingExerciseId, setRenamingExerciseId] = useState<string | null>(null);
+  const [renameExerciseInput, setRenameExerciseInput] = useState('');
+  const [restoreError, setRestoreError] = useState<string | null>(null);
+  const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
 
   const isJoelAdmin = Boolean(mainUser?.isAdmin);
+
+  const lifterMap = useMemo(
+    () => new Map(snapshot.lifters.map((l) => [l.id, l])),
+    [snapshot.lifters],
+  );
+
+  const exerciseMap = useMemo(
+    () => new Map(snapshot.exercises.map((e) => [e.id, e])),
+    [snapshot.exercises],
+  );
 
   const handleAddUser = async (e: FormEvent) => {
     e.preventDefault();
@@ -66,6 +84,7 @@ export function SettingsTab() {
   const handleAddExercise = async (e: FormEvent) => {
     e.preventDefault();
     setExerciseError(null);
+    setExerciseMessage(null);
     try {
       await store.addExercise({
         name: newExerciseName,
@@ -77,9 +96,30 @@ export function SettingsTab() {
     }
   };
 
+  const handleRenameExercise = async (targetExerciseId: string) => {
+    if (!mainUser) return;
+    setExerciseError(null);
+    setExerciseMessage(null);
+    try {
+      const updated = await store.renameExercise(
+        targetExerciseId,
+        renameExerciseInput,
+        mainUser.id,
+      );
+      setRenamingExerciseId(null);
+      setRenameExerciseInput('');
+      setExerciseMessage(`Liikkeen nimi päivitetty: ${updated.name}`);
+    } catch (err) {
+      setExerciseError(
+        err instanceof Error ? err.message : 'Liikkeen nimen muokkaus epäonnistui.',
+      );
+    }
+  };
+
   const handleDeleteExercise = async (targetExerciseId: string) => {
     if (!mainUser) return;
     setExerciseError(null);
+    setExerciseMessage(null);
     try {
       await store.deleteExercise(targetExerciseId, mainUser.id);
       setConfirmDeleteExerciseId(null);
@@ -414,7 +454,7 @@ export function SettingsTab() {
           <div>
             <h2 className="text-base font-extrabold">Hallitse liikkeitä</h2>
             <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-              Kuka tahansa voi lisätä uusia liikkeitä. Vain Joel voi poistaa niitä.
+              Kuka tahansa voi lisätä uusia liikkeitä. Vain Joel voi muokata nimiä tai poistaa niitä.
             </p>
           </div>
         </div>
@@ -460,10 +500,16 @@ export function SettingsTab() {
             {exerciseError}
           </p>
         )}
+        {exerciseMessage && (
+          <p className="text-xs font-semibold" style={{ color: 'var(--accent-text)' }}>
+            {exerciseMessage}
+          </p>
+        )}
 
         <div className="space-y-1.5 pt-1">
           {snapshot.exercises.map((ex) => {
             const isConfirming = confirmDeleteExerciseId === ex.id;
+            const isRenaming = isJoelAdmin && renamingExerciseId === ex.id;
             const categoryLabel =
               ex.category === 'pullup'
                 ? 'Kuminauha / Kehonpaino / +kg'
@@ -475,20 +521,69 @@ export function SettingsTab() {
                       ? 'Laite / Talja (kg)'
                       : 'Kehonpaino (toistot)';
 
+            if (isRenaming) {
+              return (
+                <form
+                  key={ex.id}
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void handleRenameExercise(ex.id);
+                  }}
+                  className="bb-subcard space-y-2 p-2.5"
+                >
+                  <input
+                    type="text"
+                    value={renameExerciseInput}
+                    onChange={(e) => setRenameExerciseInput(e.target.value)}
+                    aria-label={`Uusi nimi liikkeelle ${ex.name}`}
+                    className="bb-input w-full px-3 py-1.5 text-sm font-bold"
+                    autoFocus
+                  />
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                      Päivittyy myös kaikkiin aiempiin treeneihin
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="submit"
+                        disabled={!renameExerciseInput.trim()}
+                        aria-label={`Tallenna liikkeen ${ex.name} nimi`}
+                        className="bb-btn-primary px-3 py-1.5 text-xs"
+                      >
+                        Tallenna
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRenamingExerciseId(null);
+                          setRenameExerciseInput('');
+                          setExerciseError(null);
+                        }}
+                        aria-label={`Peruuta liikkeen ${ex.name} nimen muokkaus`}
+                        className="bb-pill-idle rounded-lg px-2.5 py-1.5 text-xs font-semibold"
+                      >
+                        Peruuta
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              );
+            }
+
             return (
               <div
                 key={ex.id}
-                className="bb-subcard flex items-center justify-between px-3 py-2"
+                className="bb-subcard flex items-center justify-between gap-2 px-3 py-2"
               >
-                <div>
-                  <div className="text-sm font-bold">{ex.name}</div>
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-bold">{ex.name}</div>
                   <div className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
                     {categoryLabel}
                   </div>
                 </div>
 
                 {isJoelAdmin && (
-                  <div>
+                  <div className="flex shrink-0 items-center gap-1">
                     {isConfirming ? (
                       <div className="flex items-center gap-1.5">
                         <button
@@ -509,15 +604,35 @@ export function SettingsTab() {
                         </button>
                       </div>
                     ) : (
-                      <button
-                        type="button"
-                        onClick={() => setConfirmDeleteExerciseId(ex.id)}
-                        aria-label={`Poista liike ${ex.name}`}
-                        className="rounded-lg p-1.5 transition hover:opacity-80"
-                        style={{ color: 'var(--danger)' }}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setConfirmDeleteExerciseId(null);
+                            setExerciseError(null);
+                            setExerciseMessage(null);
+                            setRenamingExerciseId(ex.id);
+                            setRenameExerciseInput(ex.name);
+                          }}
+                          aria-label={`Muokkaa liikkeen ${ex.name} nimeä`}
+                          className="rounded-lg p-1.5 transition hover:opacity-80"
+                          style={{ color: 'var(--accent-text)' }}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRenamingExerciseId(null);
+                            setConfirmDeleteExerciseId(ex.id);
+                          }}
+                          aria-label={`Poista liike ${ex.name}`}
+                          className="rounded-lg p-1.5 transition hover:opacity-80"
+                          style={{ color: 'var(--danger)' }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </>
                     )}
                   </div>
                 )}
@@ -563,6 +678,164 @@ export function SettingsTab() {
           )}
         </div>
       </section>
+
+      {/* 6. Joel (Admin) Only: Deleted Sessions & Restore */}
+      {isJoelAdmin && (
+        <section
+          data-testid="deleted-sessions-section"
+          aria-label="Poistetut treenit"
+          className="bb-widget space-y-3.5 p-4"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-2">
+              <RotateCcw className="mt-0.5 h-4 w-4 shrink-0" style={{ color: 'var(--accent-text)' }} />
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-base font-extrabold">Poistetut treenit</h2>
+                  <span
+                    className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold"
+                    style={{
+                      backgroundColor: 'var(--accent-soft)',
+                      color: 'var(--accent-text)',
+                    }}
+                  >
+                    <ShieldCheck className="h-3 w-3" />
+                    Ylläpitäjä
+                  </span>
+                </div>
+                <p className="mt-0.5 text-xs" style={{ color: 'var(--text-muted)' }}>
+                  Palauta historiasta poistetut treenit ja kaikki niiden sarjat.
+                </p>
+              </div>
+            </div>
+
+            <span
+              className="shrink-0 rounded-full px-2.5 py-1 text-xs font-bold"
+              style={{
+                backgroundColor: 'var(--accent-soft)',
+                color: 'var(--accent-text)',
+              }}
+            >
+              {deletedSessions.length}
+            </span>
+          </div>
+
+          {restoreError && (
+            <p
+              role="alert"
+              className="rounded-xl px-3 py-2 text-xs font-semibold"
+              style={{ backgroundColor: 'var(--danger-soft)', color: 'var(--danger)' }}
+            >
+              {restoreError}
+            </p>
+          )}
+          {restoreMessage && (
+            <p className="text-xs font-semibold" style={{ color: 'var(--accent-text)' }}>
+              {restoreMessage}
+            </p>
+          )}
+
+          {deletedSessions.length === 0 ? (
+            <div className="bb-subcard px-3.5 py-3 text-xs" style={{ color: 'var(--text-muted)' }}>
+              Ei poistettuja treenejä.
+            </div>
+          ) : (
+            <div className="space-y-2.5">
+              {deletedSessions.map((session) => {
+                const sessionSets = snapshot.sets.filter((s) => s.sessionId === session.id);
+                const participants = session.participantIds
+                  .map((id) => lifterMap.get(id))
+                  .filter((l): l is NonNullable<typeof l> => Boolean(l));
+                const uniqueExercises = Array.from(
+                  new Set(
+                    sessionSets
+                      .map((s) => exerciseMap.get(s.exerciseId)?.name)
+                      .filter((n): n is string => Boolean(n)),
+                  ),
+                );
+
+                return (
+                  <div
+                    key={session.id}
+                    data-testid={`deleted-session-card-${session.id}`}
+                    className="bb-subcard flex items-center justify-between gap-3 p-3"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-extrabold">{session.sessionDate}</span>
+                        <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                          {formatTimeShort(session.startedAt)}
+                        </span>
+                        <span
+                          className="rounded-full px-2 py-0.5 text-[10px] font-bold"
+                          style={{
+                            backgroundColor: 'var(--bg-surface)',
+                            color: 'var(--text-secondary)',
+                          }}
+                        >
+                          {sessionSets.length} {sessionSets.length === 1 ? 'sarja' : 'sarjaa'}
+                        </span>
+                      </div>
+
+                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                        {participants.map((p) => (
+                          <span
+                            key={p.id}
+                            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                            style={{
+                              backgroundColor: 'var(--bg-surface)',
+                              border: '1px solid var(--border-subtle)',
+                            }}
+                          >
+                            <span
+                              className="h-2 w-2 rounded-full"
+                              style={{ backgroundColor: p.avatarColor }}
+                            />
+                            {p.name}
+                          </span>
+                        ))}
+                      </div>
+
+                      {uniqueExercises.length > 0 && (
+                        <p
+                          className="mt-1 truncate text-[11px]"
+                          style={{ color: 'var(--text-muted)' }}
+                        >
+                          {uniqueExercises.join(' · ')}
+                        </p>
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!mainUser) return;
+                        setRestoreError(null);
+                        setRestoreMessage(null);
+                        try {
+                          await store.restoreSession(session.id, mainUser.id);
+                          setRestoreMessage(`Palautettiin treeni ${session.sessionDate}!`);
+                        } catch (err) {
+                          setRestoreError(
+                            err instanceof Error
+                              ? err.message
+                              : 'Treenin palauttaminen epäonnistui.',
+                          );
+                        }
+                      }}
+                      aria-label={`Palauta treeni ${session.sessionDate}`}
+                      className="bb-btn-primary flex shrink-0 items-center gap-1.5 px-3 py-2 text-xs"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      <span>Palauta</span>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      )}
     </div>
   );
 }

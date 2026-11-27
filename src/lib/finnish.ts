@@ -69,31 +69,44 @@ export function localizeExercise(exercise: Exercise): Exercise {
   };
 }
 
-export function isBenchPressExercise(exercise: Pick<Exercise, 'id' | 'name'>): boolean {
+type ExerciseIdentity = Pick<Exercise, 'id' | 'name'> &
+  Partial<Pick<Exercise, 'isBuiltin' | 'sortOrder'>>;
+
+export function isBenchPressExercise(exercise: ExerciseIdentity): boolean {
   const norm = exercise.name.trim().toLowerCase();
   return (
     exercise.id === 'ex-bench-press' ||
+    Boolean(exercise.isBuiltin && exercise.sortOrder === 2) ||
     norm === 'bench press' ||
     norm === 'penkkipunnerrus'
   );
 }
 
-export function isSquatExercise(exercise: Pick<Exercise, 'id' | 'name'>): boolean {
+export function isSquatExercise(exercise: ExerciseIdentity): boolean {
   const norm = exercise.name.trim().toLowerCase();
-  return exercise.id === 'ex-squat' || norm === 'squat' || norm === 'kyykky';
+  return (
+    exercise.id === 'ex-squat' ||
+    Boolean(exercise.isBuiltin && exercise.sortOrder === 5) ||
+    norm === 'squat' ||
+    norm === 'kyykky'
+  );
 }
 
-export function isDeadliftExercise(exercise: Pick<Exercise, 'id' | 'name'>): boolean {
+export function isDeadliftExercise(exercise: ExerciseIdentity): boolean {
   const norm = exercise.name.trim().toLowerCase();
-  return exercise.id === 'ex-deadlift' || norm === 'deadlift' || norm === 'maastaveto';
+  return (
+    exercise.id === 'ex-deadlift' ||
+    Boolean(exercise.isBuiltin && exercise.sortOrder === 4) ||
+    norm === 'deadlift' ||
+    norm === 'maastaveto'
+  );
 }
 
-export function isInclineDumbbellBenchExercise(
-  exercise: Pick<Exercise, 'id' | 'name'>,
-): boolean {
+export function isInclineDumbbellBenchExercise(exercise: ExerciseIdentity): boolean {
   const norm = exercise.name.trim().toLowerCase();
   return (
     exercise.id === 'ex-incline-db-bench' ||
+    Boolean(exercise.isBuiltin && exercise.sortOrder === 3) ||
     norm === 'incline dumbbell bench press' ||
     norm === 'vinopenkki käsipainoilla'
   );

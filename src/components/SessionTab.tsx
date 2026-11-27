@@ -36,10 +36,11 @@ import type {
   PullupMode,
   WorkoutSet,
 } from '../types/models';
+import { LiveWorkoutsSection } from './LiveWorkoutsSection';
 import { VerticalDiscreteSlider } from './VerticalDiscreteSlider';
 
 export function SessionTab() {
-  const { store, snapshot, mainUser, activeSessionForMainUser } = useApp();
+  const { store, snapshot, mainUser, activeSessionForMainUser, otherActiveSessions } = useApp();
 
   const [showNewSessionPicker, setShowNewSessionPicker] = useState(false);
   const [selectedParticipantIds, setSelectedParticipantIds] = useState<string[]>([]);
@@ -133,8 +134,9 @@ export function SessionTab() {
       targetLifterId,
       selectedExercise.id,
       snapshot.exercises,
+      snapshot.sessions,
     );
-  }, [snapshot.sets, snapshot.exercises, selectedLifterId, mainUser?.id, selectedExercise]);
+  }, [snapshot.sets, snapshot.exercises, snapshot.sessions, selectedLifterId, mainUser?.id, selectedExercise]);
 
   // Default values for each user & exercise always start at the reps and weights they did last time
   useEffect(() => {
@@ -301,7 +303,7 @@ export function SessionTab() {
               </h2>
               <p className="mt-1 text-sm" style={{ color: 'var(--text-secondary)' }}>
                 Aloita treeni yksin tai valitse päivän treenikaverit. Vain valitut treenaajat
-                näkevät käynnissä olevan treenin ja voivat kirjata siihen sarjoja.
+                voivat muokata treeniä ja kirjata siihen sarjoja.
               </p>
             </div>
           </div>
@@ -430,6 +432,14 @@ export function SessionTab() {
             </div>
           )}
         </section>
+
+        <LiveWorkoutsSection
+          sessions={otherActiveSessions}
+          sets={snapshot.sets}
+          lifterMap={lifterMap}
+          exerciseMap={exerciseMap}
+          defaultExpanded={true}
+        />
       </div>
     );
   }
@@ -917,6 +927,14 @@ export function SessionTab() {
           </div>
         )}
       </section>
+
+      <LiveWorkoutsSection
+        sessions={otherActiveSessions}
+        sets={snapshot.sets}
+        lifterMap={lifterMap}
+        exerciseMap={exerciseMap}
+        defaultExpanded={false}
+      />
     </div>
   );
 }

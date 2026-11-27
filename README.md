@@ -15,18 +15,18 @@
 - **Starter & Custom Exercises with Dual Vertical Sliders**:
   - **Left Vertical Slider**: **Toistot** (`1`–`20`) with smooth wheel scrolling and `+` / `−` precision steppers.
   - **Right Vertical Slider**: Exercise-tailored discrete weight stops — **Leuanveto** (`Kuminauha`, `Kehonpaino`, `+2.5` to `+30 kg`, never negative weight), **Penkkipunnerrus** (`20`–`120 kg` by `2.5`), **Kyykky** (`20`–`150 kg` by `2.5`), **Maastaveto** (`25`–`180 kg` by `2.5`), **Vinopenkki käsipainoilla** (`Paino (x2)`, `8, 9, 10, 12, …, 40 kg`), plus custom exercises added in-app.
-- **Participant-Scoped Live Sessions & Parallel Workouts**:
+- **Participant-Scoped Live Sessions, Parallel Workouts & Live Read-Only Inspection**:
   - Sessions are named by date (`YYYY-MM-DD`).
-  - Tap **Uusi treeni** and select who is lifting together. Only selected participants see and log into that live session on Tab 1—allowing other lifters to run separate sessions on the very same day.
-  - Tap **Lopeta treeni** when finished, or let Barbell Buddy **auto-save and finalize the session at `23:59`** local time automatically.
+  - Tap **Uusi treeni** and select who is lifting together. Only selected participants can log or edit sets in that session—allowing other lifters to run separate sessions on the very same day—while non-participants can follow ongoing workouts live in read-only mode (**Käynnissä nyt**) inside the **Treeni** tab.
+  - Tap **Lopeta treeni** when finished, or let Barbell Buddy **auto-save and finalize the session at `23:59`** local time automatically (completed sessions then move to **Historia**).
 - **4-Tab Mobile Experience**:
-  1. **Treeni**: Start a session, switch between session partners in 1 tap, and log/edit sets live.
-  2. **Historia**: Browse all previous sessions, tap any session to inspect every exercise, set, rep, and weight, or delete old sessions with an `"Oletko varma?"` confirmation.
+  1. **Treeni**: Start a session, switch between session partners in 1 tap, log/edit sets live, and watch friends' ongoing workouts in real-time read-only mode.
+  2. **Historia**: Browse all previous sessions, tap any session to inspect every exercise, set, rep, and weight, or delete sessions from history with an `"Oletko varma?"` confirmation.
   3. **Kehitys**: Multi-lifter SVG progression charts (Top Weight, Estimated 1RM, and Pull-up mode breakdowns) + Personal Record cards.
-  4. **Asetukset**: Switch Main User, customize themes & secondary widget border colors, and manage users and exercises.
+  4. **Asetukset**: Switch Main User, customize themes & secondary widget border colors, manage users and exercises (**Joel** can rename exercises across all sessions), and restore deleted sessions (**Poistetut treenit**, visible to **Joel** at the bottom of Settings).
 - **Admin PIN**:
   - Switching Main User to **Joel** requires his 4-digit admin PIN.
-  - Anyone can add new users or exercises; **only Joel** can delete users or remove exercises.
+  - Anyone can add new users or exercises; **only Joel** can delete users, rename or remove exercises, and restore sessions deleted from history.
 - **Themes & Secondary App Colors**:
   - Choose between **Vaalea**, **Tumma**, and **Pinkki** themes.
   - In **Vaalea** and **Tumma** themes, customize **Korostusväri** for widget borders and active highlights (**Neonvihreä**, **Turkoosi**, **Kirkkaanoranssi**, **Sähkönsininen**, **Kirkkaanvioletti**).

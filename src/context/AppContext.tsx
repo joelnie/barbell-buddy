@@ -26,7 +26,9 @@ interface AppContextValue {
   isReady: boolean;
   mainUser: Lifter | null;
   activeSessionForMainUser: WorkoutSession | null;
+  otherActiveSessions: WorkoutSession[];
   completedSessions: WorkoutSession[];
+  deletedSessions: WorkoutSession[];
   pendingAdminTarget: Lifter | null;
   requestSwitchMainUser: (lifter: Lifter) => void;
   cancelAdminUnlock: () => void;
@@ -200,9 +202,27 @@ export function AppProvider({
     );
   }, [mainUser, snapshot.sessions]);
 
+  const otherActiveSessions = useMemo(() => {
+    if (!mainUser) return [];
+    const now = new Date();
+    return snapshot.sessions.filter(
+      (s) => isSessionActiveAt(s, now) && !s.participantIds.includes(mainUser.id),
+    );
+  }, [mainUser, snapshot.sessions]);
+
   const completedSessions = useMemo(() => {
     const now = new Date();
-    return snapshot.sessions.filter((s) => !isSessionActiveAt(s, now));
+    return snapshot.sessions.filter((s) => !s.deletedAt && !isSessionActiveAt(s, now));
+  }, [snapshot.sessions]);
+
+  const deletedSessions = useMemo(() => {
+    return [...snapshot.sessions]
+      .filter((s) => Boolean(s.deletedAt))
+      .sort(
+        (a, b) =>
+          (b.deletedAt ?? '').localeCompare(a.deletedAt ?? '') ||
+          b.sessionDate.localeCompare(a.sessionDate),
+      );
   }, [snapshot.sessions]);
 
   const value = useMemo<AppContextValue>(
@@ -212,7 +232,9 @@ export function AppProvider({
       isReady,
       mainUser,
       activeSessionForMainUser,
+      otherActiveSessions,
       completedSessions,
+      deletedSessions,
       pendingAdminTarget,
       requestSwitchMainUser,
       cancelAdminUnlock,
@@ -224,7 +246,9 @@ export function AppProvider({
       isReady,
       mainUser,
       activeSessionForMainUser,
+      otherActiveSessions,
       completedSessions,
+      deletedSessions,
       pendingAdminTarget,
       requestSwitchMainUser,
       cancelAdminUnlock,

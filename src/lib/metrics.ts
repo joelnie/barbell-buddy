@@ -95,7 +95,12 @@ export function getLastLoggedSetForLifterExercise(
   lifterId: string,
   exerciseId: string,
   exercises?: Exercise[],
+  sessions?: WorkoutSession[],
 ): WorkoutSet | undefined {
+  const deletedSessionIds = sessions
+    ? new Set(sessions.filter((s) => Boolean(s.deletedAt)).map((s) => s.id))
+    : null;
+
   let matchingExerciseIds: Set<string> | null = null;
   if (exercises && exercises.length > 0) {
     const target = exercises.find((e) => e.id === exerciseId);
@@ -117,6 +122,7 @@ export function getLastLoggedSetForLifterExercise(
   let latestTime = -Infinity;
   for (const s of sets) {
     if (s.lifterId !== lifterId) continue;
+    if (deletedSessionIds?.has(s.sessionId)) continue;
     const matchesExercise = matchingExerciseIds
       ? matchingExerciseIds.has(s.exerciseId)
       : s.exerciseId === exerciseId;
@@ -170,7 +176,8 @@ export function computeProgressionByLifter(params: {
     weightedMetric = 'topWeight',
   } = params;
 
-  const sessionMap = new Map(sessions.map((s) => [s.id, s]));
+  const visibleSessions = sessions.filter((s) => !s.deletedAt);
+  const sessionMap = new Map(visibleSessions.map((s) => [s.id, s]));
   const seriesByLifter: Record<string, ProgressionPoint[]> = {};
   const prsByLifter: Record<string, LifterPersonalRecord | null> = {};
 

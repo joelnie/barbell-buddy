@@ -228,7 +228,7 @@ export function HistoryTab() {
                     }}
                   >
                     <span className="text-xs font-extrabold" style={{ color: 'var(--danger)' }}>
-                      Oletko varma? Treeni poistetaan pysyvästi.
+                      Oletko varma? Poistetaanko treeni historiasta?
                     </span>
                     <div className="flex items-center gap-2">
                       <button

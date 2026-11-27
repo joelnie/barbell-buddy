@@ -26,9 +26,10 @@ export function computeSessionExpiryIso(sessionDate: string): string {
 }
 
 export function isSessionActiveAt(
-  session: Pick<WorkoutSession, 'status' | 'expiresAt'>,
+  session: Pick<WorkoutSession, 'status' | 'expiresAt' | 'deletedAt'>,
   now: Date = new Date(),
 ): boolean {
+  if (session.deletedAt) return false;
   if (session.status !== 'active') return false;
   return new Date(session.expiresAt).getTime() > now.getTime();
 }

@@ -104,7 +104,9 @@ export class LocalRealtimeStore implements DataStore {
           Array.isArray(parsed.exercises) && parsed.exercises.length > 0
             ? parsed.exercises
             : createInitialPersistedData().exercises,
-        sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
+        sessions: Array.isArray(parsed.sessions)
+          ? parsed.sessions.map((s) => ({ ...s, deletedAt: s.deletedAt ?? null }))
+          : [],
         sets: Array.isArray(parsed.sets) ? parsed.sets : [],
         migratedV2,
       };
@@ -205,7 +207,7 @@ export class LocalRealtimeStore implements DataStore {
     let sweptCount = 0;
 
     const updatedSessions = data.sessions.map((session) => {
-      if (session.status === 'active' && !isSessionActiveAt(session, now)) {
+      if (!session.deletedAt && session.status === 'active' && !isSessionActiveAt(session, now)) {
         sweptCount += 1;
         return {
           ...session,
@@ -258,6 +260,7 @@ export class LocalRealtimeStore implements DataStore {
       startedAt: now.toISOString(),
       endedAt: null,
       expiresAt: computeSessionExpiryIso(sessionDate),
+      deletedAt: null,
     };
 
     this.persistAndBroadcast({
@@ -330,14 +333,56 @@ export class LocalRealtimeStore implements DataStore {
 
   async deleteSession(sessionId: string): Promise<void> {
     const data = this.readFromStorage();
-    if (!data.sessions.some((s) => s.id === sessionId)) {
+    const target = data.sessions.find((s) => s.id === sessionId && !s.deletedAt);
+    if (!target) {
       throw new Error('Treeniä ei löytynyt.');
     }
 
+    const nowIso = new Date().toISOString();
+    const updatedSessions = data.sessions.map((s) =>
+      s.id === sessionId
+        ? {
+            ...s,
+            status: 'completed' as const,
+            endedAt: s.endedAt ?? nowIso,
+            deletedAt: nowIso,
+          }
+        : s,
+    );
+
     this.persistAndBroadcast({
       ...data,
-      sessions: data.sessions.filter((s) => s.id !== sessionId),
-      sets: data.sets.filter((s) => s.sessionId !== sessionId),
+      sessions: updatedSessions,
+    });
+  }
+
+  async restoreSession(sessionId: string, actingLifterId: string): Promise<void> {
+    const data = this.readFromStorage();
+    const actor = data.lifters.find((l) => l.id === actingLifterId);
+    if (!actor?.isAdmin) {
+      throw new Error('Vain Joel (ylläpitäjä) voi palauttaa poistettuja treenejä.');
+    }
+
+    const target = data.sessions.find((s) => s.id === sessionId);
+    if (!target) {
+      throw new Error('Treeniä ei löytynyt.');
+    }
+
+    const nowIso = new Date().toISOString();
+    const updatedSessions = data.sessions.map((s) =>
+      s.id === sessionId
+        ? {
+            ...s,
+            status: 'completed' as const,
+            endedAt: s.endedAt ?? nowIso,
+            deletedAt: null,
+          }
+        : s,
+    );
+
+    this.persistAndBroadcast({
+      ...data,
+      sessions: updatedSessions,
     });
   }
 
@@ -527,6 +572,52 @@ export class LocalRealtimeStore implements DataStore {
     });
 
     return created;
+  }
+
+  async renameExercise(
+    targetExerciseId: string,
+    newName: string,
+    actingLifterId: string,
+  ): Promise<Exercise> {
+    const data = this.readFromStorage();
+    const actor = data.lifters.find((l) => l.id === actingLifterId);
+    if (!actor?.isAdmin) {
+      throw new Error('Vain Joel (ylläpitäjä) voi muokata liikkeiden nimiä.');
+    }
+
+    const trimmed = newName.trim();
+    if (!trimmed) {
+      throw new Error('Anna liikkeen nimi.');
+    }
+
+    const existing = data.exercises.find((e) => e.id === targetExerciseId);
+    if (!existing) {
+      throw new Error('Liikettä ei löytynyt.');
+    }
+
+    const candidateLower = trimmed.toLowerCase();
+    if (
+      data.exercises.some(
+        (e) =>
+          e.id !== targetExerciseId &&
+          (e.name.trim().toLowerCase() === candidateLower ||
+            localizeExerciseName(e.name).toLowerCase() === candidateLower),
+      )
+    ) {
+      throw new Error(`Liike "${trimmed}" on jo olemassa.`);
+    }
+
+    const updated: Exercise = {
+      ...existing,
+      name: trimmed,
+    };
+
+    this.persistAndBroadcast({
+      ...data,
+      exercises: data.exercises.map((e) => (e.id === targetExerciseId ? updated : e)),
+    });
+
+    return localizeExercise(updated);
   }
 
   async deleteExercise(targetExerciseId: string, actingLifterId: string): Promise<void> {

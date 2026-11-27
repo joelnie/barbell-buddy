@@ -42,6 +42,7 @@ interface SessionRow {
   started_at: string;
   ended_at: string | null;
   expires_at: string;
+  deleted_at?: string | null;
 }
 
 interface ParticipantRow {
@@ -286,6 +287,7 @@ export class SupabaseRealtimeStore implements DataStore {
         startedAt: r.started_at,
         endedAt: r.ended_at,
         expiresAt: r.expires_at,
+        deletedAt: r.deleted_at ?? null,
       }));
 
     const sets: WorkoutSet[] = ((setsRes.data ?? []) as SetRow[]).map((r) => ({
@@ -313,7 +315,7 @@ export class SupabaseRealtimeStore implements DataStore {
 
   async sweepExpiredSessions(now: Date = new Date()): Promise<number> {
     const expired = this.snapshot.sessions.filter(
-      (s) => s.status === 'active' && !isSessionActiveAt(s, now),
+      (s) => !s.deletedAt && s.status === 'active' && !isSessionActiveAt(s, now),
     );
     if (expired.length === 0) return 0;
 
@@ -436,29 +438,28 @@ export class SupabaseRealtimeStore implements DataStore {
   }
 
   async deleteSession(sessionId: string): Promise<void> {
-    const { error: setsErr } = await this.client
-      .from('workout_sets')
-      .delete()
-      .eq('session_id', sessionId);
-    if (setsErr) throw new Error(setsErr.message);
+    const nowIso = new Date().toISOString();
+    const existing = this.snapshot.sessions.find((s) => s.id === sessionId);
 
-    const { data: deletedRows, error: delErr } = await this.client
+    const { error } = await this.client
       .from('workout_sessions')
-      .delete()
-      .eq('id', sessionId)
-      .select('id');
+      .update({
+        deleted_at: nowIso,
+        status: 'completed',
+        ended_at: existing?.endedAt ?? nowIso,
+      })
+      .eq('id', sessionId);
 
-    if (delErr) throw new Error(delErr.message);
+    if (error) throw new Error(error.message);
+    await this.refresh();
+  }
 
-    // Fallback for projects that haven't applied sessions_delete_authenticated RLS yet
-    if (!deletedRows || deletedRows.length === 0) {
-      const { error: tombErr } = await this.client
-        .from('workout_sessions')
-        .update({ session_date: '__deleted__', status: 'completed' })
-        .eq('id', sessionId);
-      if (tombErr) throw new Error(tombErr.message);
-    }
-
+  async restoreSession(sessionId: string, actingLifterId: string): Promise<void> {
+    const { error } = await this.client.rpc('admin_restore_session', {
+      target_session_id: sessionId,
+      acting_lifter_id: actingLifterId,
+    });
+    if (error) throw new Error(error.message);
     await this.refresh();
   }
 
@@ -609,6 +610,27 @@ export class SupabaseRealtimeStore implements DataStore {
       sortOrder: r.sort_order,
       createdAt: r.created_at,
     };
+  }
+
+  async renameExercise(
+    targetExerciseId: string,
+    newName: string,
+    actingLifterId: string,
+  ): Promise<Exercise> {
+    const trimmed = newName.trim();
+    if (!trimmed) throw new Error('Anna liikkeen nimi.');
+
+    const { error } = await this.client.rpc('admin_rename_exercise', {
+      target_exercise_id: targetExerciseId,
+      new_name: trimmed,
+      acting_lifter_id: actingLifterId,
+    });
+    if (error) throw new Error(error.message);
+
+    await this.refresh();
+    const updated = this.snapshot.exercises.find((e) => e.id === targetExerciseId);
+    if (!updated) throw new Error('Liikettä ei löytynyt.');
+    return updated;
   }
 
   async deleteExercise(targetExerciseId: string, actingLifterId: string): Promise<void> {
